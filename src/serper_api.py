@@ -1,10 +1,14 @@
 import requests
 import json
 import random
+import os
+from dotenv import load_dotenv
+
+serper_key = os.getenv('SERPER_API')
 
 # Load your API keys
 SERPER_API_KEYS = [
-    "a31cf0daa51441c24922a103e50d5fa3aabf3b89",
+    serper_key,
 ]
 
 SEARCH_URL = "https://google.serper.dev/search"
