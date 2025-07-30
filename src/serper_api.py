@@ -4,7 +4,13 @@ import random
 import os
 from dotenv import load_dotenv
 
+# 1) load the .env file now
+load_dotenv()
+
+# 2) then grab your key
 serper_key = os.getenv('SERPER_API')
+if not serper_key:
+    raise RuntimeError("SERPER_API not set in environment or .env file")
 
 # Load your API keys
 SERPER_API_KEYS = [
