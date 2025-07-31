@@ -47,9 +47,7 @@ We collected ~9 000 blog posts by automating Google searches via the Serper API 
 ### 2. `rag_recomm.ipynb` – Retrieval & Generation  
 - Loads the FAISS index and the chunk metadata.  
 - Defines a semantic retrieval function that embeds incoming queries on GPU and retrieves top-k chunks.  
-- Assembles retrieved text into a context prompt.  
-- Generates an answer with a local LLM (e.g. GPT-J) on GPU.  
-- (Optionally) exposes a lightweight Gradio interface for live querying.
+- Assembles retrieved text into a context prompt.
 
 ---
 
