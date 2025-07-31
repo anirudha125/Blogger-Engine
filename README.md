@@ -31,7 +31,8 @@ We collected ~9 000 blog posts by automating Google searches via the Serper API 
 
 ## Data & Metadata
 
-- The raw corpus (**scraped_blogs_final.json - https://drive.google.com/file/d/1z4DMBtV6aPV9y3A_c-6OqanN8A0xL2yA/view?usp=sharing**) and the downstream chunk metadata (**metadata.pkl - https://drive.google.com/file/d/13phpSJbizWVxbmrwOUQMsarqIXDlMsTr/view?usp=sharing**) have been uploaded to Google Drive for easy access.  
+- The raw corpus (**scraped_blogs_final.json - https://drive.google.com/file/d/1z4DMBtV6aPV9y3A_c-6OqanN8A0xL2yA/view?usp=sharing**) and the 
+  downstream chunk metadata (**metadata.pkl - https://drive.google.com/file/d/13phpSJbizWVxbmrwOUQMsarqIXDlMsTr/view?usp=sharing**) have been uploaded to Google Drive for easy access.  
 - In Kaggle or Colab, mount the Drive and point your notebooks at those files under the mounted path.  
 
 ---
