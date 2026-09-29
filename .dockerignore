@@ -1,0 +1,64 @@
+# ==============================================================================
+# Docker Build Ignore Configuration for Blogger Engine
+# ==============================================================================
+
+# Version Control & CI/CD
+.git
+.gitignore
+.gitattributes
+.github
+
+# Virtual Environments & Python Caches
+.venv
+venv
+env
+ENV
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+.pytest_cache
+.coverage
+htmlcov
+
+# Environment & Local Secrets
+.env
+.env.*
+!.env.example
+
+# Notebooks & Research Scratchpads
+notebooks/
+scratch/
+*.ipynb
+
+# Historical Tests & Benchmarks (Runtime only needs production app)
+tests/
+
+# Research & Evaluation Scripts
+scripts/
+
+# Sample / Baseline / Historical Artifacts (Excluded to keep build context clean)
+data/sample.json
+data/blogger.db
+data/blogger_baseline_dedup.db
+data/eval_*.json
+data/eval_*.md
+data/calibration_*.json
+indexes/faiss_chunked.index
+indexes/faiss_baseline_dedup.index
+indexes/faiss_chunked_bge.index
+indexes/bm25_sample.pkl
+
+# IDE & OS Metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Task logs and Agent Artifacts
+.gemini/
+.system_generated/

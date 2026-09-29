@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blogger Engine | Precision RAG Platform</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Editorial Header -->
+  <header>
+    <div class="nav-bar">
+      <div class="brand">
+        <span class="brand-emblem">✦</span>
+        <span class="brand-title">Blogger Engine</span>
+        <span class="brand-sub">Curated Archive</span>
+      </div>
+      <div class="nav-meta">
+        <div id="status-badge" class="status-badge">
+          <span class="status-dot"></span>
+          <span id="status-text">SYSTEM READY</span>
+        </div>
+        <span id="corpus-stats" style="display: none; font-family: var(--font-mono); letter-spacing: 0.04em; color: var(--gold-light);">0 CHUNKS</span>
+        <a href="/docs" target="_blank" class="nav-link">API Specification</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Compact Editorial Hero -->
+    <section class="hero">
+      <div class="hero-ornament">✦ Technical Monograph Retrieval ✦</div>
+      <h2>Precision Discovery &amp; <em>Grounded Synthesis</em></h2>
+      <p>A high-assurance retrieval platform built for semantic exploration and verified source citations across machine learning research.</p>
+    </section>
+
+    <!-- Distinctive Mode Switcher -->
+    <nav class="mode-tabs">
+      <button id="tab-search" class="mode-tab active" onclick="setMode('search')">
+        <span>✦</span> Semantic Discovery
+      </button>
+      <button id="tab-ask" class="mode-tab" onclick="setMode('ask')">
+        <span>✦</span> Grounded Synthesis
+      </button>
+    </nav>
+
+    <!-- Elevated Search Bar - Visual Focal Point -->
+    <form class="search-form" onsubmit="handleQuery(event)">
+      <div class="search-bar">
+        <input
+          type="text"
+          id="query-input"
+          class="search-input"
+          placeholder="Inquire across RLHF, RLAIF, preference models, and constitutional AI..."
+          required
+          autocomplete="off"
+        />
+        <button type="submit" id="submit-btn" class="submit-btn">
+          <span id="btn-text">Inquire</span>
+          <span id="btn-spinner" class="spinner-icon" style="display: none;"></span>
+        </button>
+      </div>
+
+      <!-- Curated Topics -->
+      <div class="sample-bar">
+        <span class="sample-title">Curated Topics:</span>
+        <button type="button" class="sample-btn" onclick="fillQuery('What is RLAIF and how does it work?')">
+          What is RLAIF?
+        </button>
+        <button type="button" class="sample-btn" onclick="fillQuery('How does RLAIF compare to RLHF in terms of scalability?')">
+          RLAIF vs. RLHF scalability
+        </button>
+        <button type="button" class="sample-btn" onclick="fillQuery('What is a preference model in reinforcement learning?')">
+          Preference models
+        </button>
+        <button type="button" class="sample-btn" onclick="fillQuery('How to bake authentic Neapolitan sourdough pizza?')">
+          Out-of-domain refusal test
+        </button>
+      </div>
+    </form>
+
+    <!-- In-Page Editorial Notice for API Status / Validation / System Degradation -->
+    <div id="status-notice" class="editorial-notice" style="display: none;" role="alert" aria-live="polite">
+      <div class="notice-icon">✦</div>
+      <div class="notice-content">
+        <div id="notice-title" class="notice-title">Notice</div>
+        <div id="notice-msg" class="notice-body"></div>
+      </div>
+      <button type="button" class="notice-dismiss" onclick="dismissNotice()" aria-label="Dismiss notice">✕</button>
+    </div>
+
+    <!-- Results Section -->
+    <section id="results-container" style="display: none;">
+      <!-- QA Answer Box - Dominant Centerpiece in QA Mode -->
+      <div id="qa-box" class="qa-box" style="display: none;">
+        <div class="qa-headline">
+          <span id="qa-badge" class="qa-badge">✦ Grounded Synthesis</span>
+          <span id="qa-confidence" class="qa-confidence">CONFIDENCE 0.00</span>
+        </div>
+        <div id="qa-answer-text" class="qa-body"></div>
+        <div id="qa-citations" class="qa-citations" style="display: none;">
+          <span class="citation-label">Verified Citations:</span>
+          <div id="citations-list" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+        </div>
+      </div>
+
+      <!-- Results Meta Header -->
+      <div class="results-header">
+        <span id="results-label" class="results-label">Retrieved Passages</span>
+        <div class="results-stats">
+          <span id="meta-count">0 items</span>
+          <span>·</span>
+          <span id="meta-latency">0.0 ms</span>
+          <span id="meta-model" style="display: none; color: var(--gold-primary);"></span>
+        </div>
+      </div>
+
+      <!-- Editorial Results List -->
+      <div id="results-list" class="results-list"></div>
+    </section>
+
+    <!-- Empty State -->
+    <div id="initial-state" class="empty-msg">
+      <p>Select a curated topic above or enter an inquiry to examine the archive.</p>
+    </div>
+  </main>
+
+  <script>
+    let currentMode = 'search';
+    let isSubmitting = false;
+    let hasLoadedResults = false;
+    const CANONICAL_TOP_K = 3;
+
+    // Client-side text sanitization to resolve upstream encoding artifacts (mojibake) cleanly
+    function sanitizeText(str) {
+      if (!str) return '';
+      return str
+        .replace(/â€™/g, "'")
+        .replace(/â€˜/g, "'")
+        .replace(/â€œ/g, '"')
+        .replace(/â€/g, '"')
+        .replace(/â€”/g, '—')
+        .replace(/â€“/g, '–')
+        .replace(/â€¦/g, '…')
+        .replace(/Â/g, '')
+        .replace(/\u00A0/g, ' ');
+    }
+
+    function extractHostname(url) {
+      try {
+        const parsed = new URL(url);
+        return parsed.hostname.replace(/^www\./, '');
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function showNotice(title, message, level = 'warning') {
+      const notice = document.getElementById('status-notice');
+      const noticeTitle = document.getElementById('notice-title');
+      const noticeMsg = document.getElementById('notice-msg');
+      if (!notice || !noticeTitle || !noticeMsg) return;
+
+      notice.className = `editorial-notice notice-${level}`;
+      noticeTitle.textContent = title;
+      noticeMsg.textContent = message;
+      notice.style.display = 'flex';
+    }
+
+    function dismissNotice() {
+      const notice = document.getElementById('status-notice');
+      if (notice) notice.style.display = 'none';
+    }
+
+    async function parseApiError(res) {
+      let title = 'Inquiry Error';
+      let message = 'An error occurred while processing your request.';
+
+      if (res.status === 503) {
+        title = 'Service Temporarily Unavailable';
+        message = 'The search and retrieval engine is currently unavailable or initializing. Please try again shortly.';
+        return { title, message, level: 'warning' };
+      }
+
+      try {
+        const data = await res.json();
+        if (data) {
+          if (typeof data.detail === 'string') {
+            message = data.detail;
+          } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+            message = data.detail
+              .map(item => item.msg ? item.msg.replace(/^Value error,\s*/i, '') : JSON.stringify(item))
+              .join('; ');
+          } else if (data.message) {
+            message = data.message;
+          }
+        }
+      } catch (_) {
+        message = `Server returned HTTP ${res.status}: ${res.statusText || 'Error'}`;
+      }
+
+      if (res.status >= 400 && res.status < 500) {
+        title = 'Invalid Request';
+        return { title, message, level: 'warning' };
+      }
+
+      title = 'Backend Processing Error';
+      return { title, message, level: 'error' };
+    }
+
+    async function loadSystemStatus() {
+      try {
+        const healthRes = await fetch('/health');
+        if (healthRes.ok) {
+          const health = await healthRes.json();
+          const indicator = document.getElementById('status-text');
+          const dot = document.querySelector('.status-dot');
+          if (health.status === 'ok') {
+            indicator.textContent = 'SYSTEM READY';
+            dot.style.background = 'var(--gold-primary)';
+          } else {
+            indicator.textContent = 'DEGRADED';
+            dot.style.background = '#f59e0b';
+          }
+        } else {
+          document.getElementById('status-text').textContent = 'DEGRADED';
+          const dot = document.querySelector('.status-dot');
+          if (dot) dot.style.background = '#f59e0b';
+        }
+
+        const statsRes = await fetch('/api/stats');
+        if (statsRes.ok) {
+          const stats = await statsRes.json();
+          const statsEl = document.getElementById('corpus-stats');
+          statsEl.textContent = `${stats.total_chunks} CHUNKS · ${stats.total_documents} DOCS`;
+          statsEl.style.display = 'inline';
+        }
+      } catch (err) {
+        document.getElementById('status-text').textContent = 'OFFLINE';
+        const dot = document.querySelector('.status-dot');
+        if (dot) dot.style.background = '#ef4444';
+      }
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('tab-search').classList.toggle('active', mode === 'search');
+      document.getElementById('tab-ask').classList.toggle('active', mode === 'ask');
+      document.getElementById('btn-text').textContent = mode === 'search' ? 'Discover' : 'Inquire';
+      document.getElementById('query-input').placeholder = mode === 'search' 
+        ? 'Search technical passages on RLHF, RLAIF, and model alignment...'
+        : 'Inquire to receive a grounded answer with verified citations...';
+    }
+
+    function fillQuery(text) {
+      const input = document.getElementById('query-input');
+      input.value = text;
+      handleQuery(new Event('submit'));
+    }
+
+    async function handleQuery(e) {
+      if (e) e.preventDefault();
+      if (isSubmitting) return;
+
+      const rawInput = document.getElementById('query-input').value;
+      const query = rawInput.trim();
+      if (!query) {
+        showNotice('Inquiry Required', 'Please enter a search query or question to examine the archive.', 'warning');
+        document.getElementById('query-input').focus();
+        return;
+      }
+
+      dismissNotice();
+
+      const submitBtn = document.getElementById('submit-btn');
+      const btnText = document.getElementById('btn-text');
+      const btnSpinner = document.getElementById('btn-spinner');
+
+      isSubmitting = true;
+      submitBtn.disabled = true;
+      btnText.style.display = 'none';
+      btnSpinner.style.display = 'inline-block';
+
+      const resultsContainer = document.getElementById('results-container');
+      const initialState = document.getElementById('initial-state');
+      const qaBox = document.getElementById('qa-box');
+      const resultsLabel = document.getElementById('results-label');
+
+      try {
+        if (currentMode === 'search') {
+          qaBox.style.display = 'none';
+          resultsLabel.textContent = 'Matching Articles & Passages';
+
+          const res = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, top_k: CANONICAL_TOP_K })
+          });
+
+          if (!res.ok) {
+            const apiError = await parseApiError(res);
+            const error = new Error(apiError.message);
+            error.apiError = apiError;
+            throw error;
+          }
+
+          const data = await res.json();
+
+          hasLoadedResults = true;
+          initialState.style.display = 'none';
+          resultsContainer.style.display = 'block';
+
+          document.getElementById('meta-count').textContent = `${data.total_results} passages`;
+          document.getElementById('meta-latency').textContent = `${data.latency_ms} ms`;
+          document.getElementById('meta-model').style.display = 'none';
+
+          renderPassages(data.results);
+        } else {
+          resultsLabel.textContent = 'Referenced Source Material';
+
+          const res = await fetch('/api/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, top_k: CANONICAL_TOP_K })
+          });
+
+          if (!res.ok) {
+            const apiError = await parseApiError(res);
+            const error = new Error(apiError.message);
+            error.apiError = apiError;
+            throw error;
+          }
+
+          const data = await res.json();
+
+          hasLoadedResults = true;
+          initialState.style.display = 'none';
+          resultsContainer.style.display = 'block';
+
+          document.getElementById('meta-count').textContent = `${data.sources.length} sources`;
+          document.getElementById('meta-latency').textContent = `${data.latency_ms} ms`;
+          
+          const metaModel = document.getElementById('meta-model');
+          metaModel.textContent = `· ${data.provider.toUpperCase()} / ${data.model}`;
+          metaModel.style.display = 'inline';
+
+          // QA Box State - Dominant Centerpiece
+          qaBox.style.display = 'block';
+          qaBox.classList.toggle('refused', data.refused);
+
+          const qaBadge = document.getElementById('qa-badge');
+          qaBadge.textContent = data.refused ? '⚠ Request Refused (Below Confidence Threshold)' : '✦ Grounded Synthesis';
+
+          const confScore = (typeof data.confidence_score === 'number' && !isNaN(data.confidence_score))
+            ? data.confidence_score.toFixed(3)
+            : '0.000';
+          document.getElementById('qa-confidence').textContent = `CONFIDENCE ${confScore}`;
+          document.getElementById('qa-answer-text').textContent = sanitizeText(data.answer);
+
+          // Citations List
+          const citationsContainer = document.getElementById('qa-citations');
+          const citationsList = document.getElementById('citations-list');
+          citationsList.innerHTML = '';
+
+          if (data.citations && data.citations.length > 0) {
+            citationsContainer.style.display = 'flex';
+            data.citations.forEach((c) => {
+              const tag = document.createElement('button');
+              tag.className = 'citation-tag';
+              const cleanDocNum = (c.doc_tag || '').replace(/[\[\]]/g, '');
+              const cleanTitle = sanitizeText(c.title || '').substring(0, 26);
+              tag.textContent = `${cleanDocNum} · ${cleanTitle}...`;
+              tag.title = `${c.title || ''} (${c.url || ''})`;
+              tag.onclick = () => highlightRow(c.chunk_id);
+              citationsList.appendChild(tag);
+            });
+          } else {
+            citationsContainer.style.display = 'none';
+          }
+
+          renderPassages(data.sources);
+        }
+      } catch (err) {
+        if (err.apiError) {
+          showNotice(err.apiError.title, err.apiError.message, err.apiError.level);
+        } else if (err.name === 'TypeError' || (err.message && err.message.toLowerCase().includes('fetch'))) {
+          showNotice(
+            'Connection Notice',
+            'Unable to reach the Blogger Engine backend. Please verify network connectivity.',
+            'error'
+          );
+        } else {
+          showNotice('Inquiry Notice', err.message || 'An unexpected error occurred.', 'warning');
+        }
+
+        // If no results have ever loaded, maintain the clean initial state
+        if (!hasLoadedResults) {
+          initialState.style.display = 'block';
+          resultsContainer.style.display = 'none';
+        }
+      } finally {
+        isSubmitting = false;
+        submitBtn.disabled = false;
+        btnText.style.display = 'inline';
+        btnSpinner.style.display = 'none';
+      }
+    }
+
+    function renderPassages(passages) {
+      const container = document.getElementById('results-list');
+      container.innerHTML = '';
+
+      if (!passages || passages.length === 0) {
+        container.innerHTML = '<p class="empty-msg">No corresponding passages located in the archive.</p>';
+        return;
+      }
+
+      passages.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'result-row';
+        row.id = `row-${p.chunk_id}`;
+
+        const numStr = String(idx + 1).padStart(2, '0');
+        const rawContent = sanitizeText((p.content || '').trim());
+        const isLong = rawContent.length > 250;
+        const excerpt = isLong ? rawContent.substring(0, 250) + '...' : rawContent;
+        const host = extractHostname(p.url);
+        const authorText = p.author && p.author !== 'Unknown' ? `By ${sanitizeText(p.author)}` : '';
+        const sourceLine = [authorText, host].filter(Boolean).join(' · ');
+        const scoreFormatted = (typeof p.score === 'number' && !isNaN(p.score)) ? p.score.toFixed(4) : '0.0000';
+
+        row.innerHTML = `
+          <div class="row-top">
+            <div class="row-title-wrap">
+              <span class="row-index">${numStr}</span>
+              <a href="${escapeHtml(p.url || '#')}" target="_blank" rel="noopener noreferrer" class="row-title">
+                ${escapeHtml(sanitizeText(p.title || 'Untitled Passage'))}
+              </a>
+            </div>
+            <span class="row-score">Score ${scoreFormatted}</span>
+          </div>
+
+          ${sourceLine ? `<div class="row-author-source">${escapeHtml(sourceLine)}</div>` : ''}
+
+          <div class="row-content">
+            <div id="excerpt-${p.chunk_id}" class="row-excerpt">${escapeHtml(excerpt)}</div>
+            ${isLong ? `
+              <div id="full-${p.chunk_id}" class="row-full">${escapeHtml(rawContent)}</div>
+              <div id="meta-${p.chunk_id}" class="row-expanded-meta">
+                <span>CHUNK #${p.chunk_index}</span>
+                <span>${p.word_count} WORDS</span>
+                <span>ID: ${escapeHtml(p.chunk_id || '')}</span>
+              </div>
+              <button type="button" class="toggle-passage-btn" onclick="togglePassage('${p.chunk_id}', this)">
+                ✦ Read full passage ↓
+              </button>
+            ` : ''}
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function togglePassage(chunkId, btn) {
+      const excerptEl = document.getElementById(`excerpt-${chunkId}`);
+      const fullEl = document.getElementById(`full-${chunkId}`);
+      const metaEl = document.getElementById(`meta-${chunkId}`);
+      if (!excerptEl || !fullEl) return;
+
+      const isExpanded = fullEl.style.display === 'block';
+      if (isExpanded) {
+        fullEl.style.display = 'none';
+        excerptEl.style.display = 'block';
+        if (metaEl) metaEl.style.display = 'none';
+        btn.textContent = '✦ Read full passage ↓';
+      } else {
+        fullEl.style.display = 'block';
+        excerptEl.style.display = 'none';
+        if (metaEl) metaEl.style.display = 'flex';
+        btn.textContent = '✦ Collapse passage ↑';
+      }
+    }
+
+    function highlightRow(chunkId) {
+      const el = document.getElementById(`row-${chunkId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('highlighted');
+        setTimeout(() => {
+          el.classList.remove('highlighted');
+        }, 2200);
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    loadSystemStatus();
+  </script>
+</body>
+</html>

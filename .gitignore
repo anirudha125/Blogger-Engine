@@ -1,3 +1,103 @@
+# ==============================================================================
+# Blogger Engine - Git Ignore Rules
+# ==============================================================================
+
+# Virtual Environments
 venv/
-src/__pycache__
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python Bytecode & Runtime Caches
+**/__pycache__/
+**/*.py[cod]
+*$py.class
+.Python
+
+# Pytest & Coverage Caches
+.pytest_cache/
+**/.pytest_cache/**
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Environment Configuration & Secrets (Never commit live secrets)
 .env
+.env.*
+!.env.example
+
+# Operating System & IDE Files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ==============================================================================
+# Large Production Runtime Artifacts
+# (Exceed GitHub 100MB limit; provisioned separately on deployment host)
+# ==============================================================================
+indexes/faiss_chunked_bge_dedup.index
+indexes/bm25_chunked_dedup.pkl
+data/blogger_dedup.db
+data/blogger_dedup.db.gz
+
+# ==============================================================================
+# Non-Canonical / Intermediate Research Data & Index Artifacts
+# ==============================================================================
+data/blogger_full.db
+data/blogger_baseline_full.db
+data/blogger_baseline_dedup.db
+data/blogger_bge.db
+data/dedup_mapping.json
+indexes/faiss_chunked_full.index
+indexes/faiss_chunked_dedup.index
+indexes/faiss_chunked_bge.index
+indexes/faiss_baseline.index
+indexes/faiss_baseline_dedup.index
+indexes/faiss_baseline_full.index
+indexes/metadata_full.pkl
+indexes/metadata_baseline_dedup.pkl
+
+# ==============================================================================
+# Offline Research Benchmarks, Calibration & Experiment Outputs
+# ==============================================================================
+data/eval_dataset_full.json
+data/calibration_dataset.json
+data/eval_report_*.md
+data/eval_results_*.json
+data/calibration_report.md
+data/calibration_results_*.json
+
+# Scratchpads & Experimental Notebooks
+scratch/
+notebooks/exp1_*
+notebooks/kaggle_*
+
+# ==============================================================================
+# Offline Experimental Scripts (Research History)
+# ==============================================================================
+scripts/build_baseline_wholedoc.py
+scripts/build_calibration_dataset.py
+scripts/build_exp1_bge_index.py
+scripts/build_full_eval_dataset.py
+scripts/compare_experiments.py
+scripts/create_eval_dataset.py
+scripts/curate_full_dataset.py
+scripts/deduplicate_corpus.py
+scripts/re_curate_eval_dataset.py
+scripts/rebuild_dedup_indexes.py
+scripts/reconstruct_dedup_indexes.py
+scripts/run_calibration_analysis.py
+scripts/validate_corrections.py
+scripts/verify_dedup_reconstruction.py
+scripts/verify_exp1_index.py
