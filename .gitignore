@@ -29,6 +29,10 @@ htmlcov/
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
 
 # Operating System & IDE Files
 .DS_Store

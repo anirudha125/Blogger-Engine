@@ -27,6 +27,10 @@ htmlcov
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
 
 # Notebooks & Research Scratchpads
 notebooks/
