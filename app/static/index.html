@@ -349,7 +349,13 @@
           qaBox.classList.toggle('refused', data.refused);
 
           const qaBadge = document.getElementById('qa-badge');
-          qaBadge.textContent = data.refused ? '⚠ Request Refused (Below Confidence Threshold)' : '✦ Grounded Synthesis';
+          if (data.refused) {
+            qaBadge.textContent = (data.confidence_score < 0.65)
+              ? '⚠ Request Refused (Below Confidence Threshold)'
+              : '⚠ Request Refused (Insufficient Evidence)';
+          } else {
+            qaBadge.textContent = '✦ Grounded Synthesis';
+          }
 
           const confScore = (typeof data.confidence_score === 'number' && !isNaN(data.confidence_score))
             ? data.confidence_score.toFixed(3)

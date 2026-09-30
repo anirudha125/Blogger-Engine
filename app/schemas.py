@@ -48,7 +48,15 @@ class AskRequest(BaseModel):
     """Input payload for RAG question answering."""
     query: str = Field(..., min_length=1, max_length=500, description="Question for the RAG engine")
     top_k: int = Field(3, ge=1, le=20, description="Number of context passages to supply to the LLM")
-    similarity_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Override minimum confidence threshold")
+    similarity_threshold: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Override minimum confidence threshold (0.65 = empirical threshold on maximum BGE cosine "
+            "similarity among final top-3 retrieved results; cross-encoder is used for reranking)"
+        )
+    )
 
     @field_validator("query")
     @classmethod
@@ -72,8 +80,22 @@ class AskResponse(BaseModel):
     """Response payload for RAG question answering with citations."""
     query: str
     answer: str
-    refused: bool
-    confidence_score: float
+    refused: bool = Field(
+        ...,
+        description=(
+            "True if the system was unable or declined to answer (due to retrieval confidence below "
+            "the 0.65 empirical threshold on maximum BGE cosine similarity among final top-3 retrieved results, "
+            "post-generation detection/classification of standard insufficient-evidence/refusal responses, "
+            "or generation failure); False if an affirmative, grounded answer was successfully generated."
+        )
+    )
+    confidence_score: float = Field(
+        ...,
+        description=(
+            "Maximum BGE cosine similarity among final top-3 retrieved results "
+            "(evaluated against the empirical 0.65 threshold; cross-encoder is used for reranking)"
+        )
+    )
     citations: List[CitationItem]
     sources: List[SearchResultItem]
     latency_ms: float

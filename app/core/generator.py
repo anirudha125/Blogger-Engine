@@ -160,6 +160,29 @@ class AnswerGenerator:
                 )
         return citations
 
+    REFUSAL_PATTERNS = [
+        r"i\s+(?:do\s+not|don't)\s+have\s+(?:sufficient|enough)\s+information\s+in\s+the\s+provided\s+(?:blog\s+articles|articles|passages|context|sources)",
+        r"i\s+(?:do\s+not|don't)\s+have\s+(?:sufficient|enough)\s+information\s+to\s+answer\s+this\s+question",
+        r"(?:the\s+)?provided\s+(?:blog\s+articles|articles|passages|context|sources)\s+(?:do\s+not|does\s+not|don't|doesn't)\s+contain\s+(?:sufficient|enough)\s+information",
+        r"i\s+cannot\s+answer\s+this\s+question\s+(?:based\s+on|using|from)\s+the\s+provided",
+        r"^i\s+(?:do\s+not|don't)\s+have\s+enough\s+information",
+        r"(?:there\s+is\s+)?no\s+(?:relevant\s+)?information\s+in\s+the\s+provided\s+(?:blog\s+articles|articles|passages|context|sources)",
+        r"none\s+of\s+the\s+provided\s+(?:blog\s+articles|articles|passages|context|sources)\s+(?:discuss|mention|contain)",
+    ]
+
+    def is_refusal_response(self, text: str) -> bool:
+        """
+        Post-generation detection and classification of standard insufficient-evidence/refusal responses.
+        Matches the canonical prompt refusal rule (Rule 3) and standard phrasing variants.
+        """
+        if not text:
+            return True
+        cleaned = text.strip().lower()
+        for pattern in self.REFUSAL_PATTERNS:
+            if re.search(pattern, cleaned):
+                return True
+        return False
+
     def generate_answer(
         self,
         query: str,
@@ -168,7 +191,9 @@ class AnswerGenerator:
     ) -> GeneratedAnswer:
         """
         Generate a cited answer for the query using retrieved passages.
-        Refuses to answer if top passage similarity is below threshold.
+        Refuses to answer if maximum BGE cosine similarity among retrieved passages is below threshold.
+        (0.65 = empirical threshold on maximum BGE cosine similarity among final top-3 retrieved results;
+        cross-encoder is used for candidate reranking during retrieval).
 
         Args:
             query: The user query string.
@@ -200,11 +225,11 @@ class AnswerGenerator:
 
         top_score = max(p.score for p in passages)
 
-        # Check refusal condition 2: Below confidence threshold
+        # Check refusal condition 2: Below confidence threshold (maximum BGE cosine similarity)
         if top_score < effective_threshold:
             elapsed = (time.time() - start_time) * 1000
             logger.info(
-                f"Query refused: top similarity {top_score:.3f} is below threshold {effective_threshold:.3f}"
+                f"Query refused: top BGE similarity {top_score:.3f} is below threshold {effective_threshold:.3f}"
             )
             return GeneratedAnswer(
                 answer=(
@@ -263,7 +288,8 @@ class AnswerGenerator:
                 data = response.json()
                 raw_text = data["choices"][0]["message"]["content"].strip()
 
-            citations = self.extract_citations(raw_text, passages)
+            is_refusal = self.is_refusal_response(raw_text)
+            citations = [] if is_refusal else self.extract_citations(raw_text, passages)
             elapsed = (time.time() - start_time) * 1000
 
             return GeneratedAnswer(
@@ -271,7 +297,7 @@ class AnswerGenerator:
                 citations=citations,
                 sources=sources_summary,
                 confidence_score=round(top_score, 4),
-                refused=False,
+                refused=is_refusal,
                 latency_ms=round(elapsed, 2),
                 model=self.model,
                 provider=self.provider
