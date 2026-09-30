@@ -1,6 +1,15 @@
 # Blogger Engine: Production RAG Search & QA Platform
 
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![PyTorch CPU](https://img.shields.io/badge/PyTorch-CPU-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Docker](https://img.shields.io/badge/Docker-ARM64%20Multi--stage-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Tests](https://img.shields.io/badge/Tests-94%20passed-brightgreen.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > A production-structured Retrieval-Augmented Generation (RAG) platform delivering grounded semantic search and verifiable citation-backed question answering over 8,242 technical publications (81,123 passage chunks).
+
+**Live Public Demo**: [http://141.148.198.115:8000](http://141.148.198.115:8000) *(hosted on Oracle Cloud ARM64)*
 
 ---
 
