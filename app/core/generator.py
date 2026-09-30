@@ -78,18 +78,22 @@ class AnswerGenerator:
         similarity_threshold: Optional[float] = None,
         timeout: float = 30.0
     ):
-        self.provider = (provider or os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER)).lower()
-        self.model = model or os.getenv("LLM_MODEL", DEFAULT_MODEL)
-        self.api_key = api_key or os.getenv("LLM_API_KEY", "")
+        raw_provider = provider if provider is not None else os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER)
+        self.provider = raw_provider.strip().lower()
+
+        raw_model = model if model is not None else os.getenv("LLM_MODEL", DEFAULT_MODEL)
+        self.model = raw_model.strip()
+
+        raw_api_key = api_key if api_key is not None else os.getenv("LLM_API_KEY", "")
+        self.api_key = raw_api_key.strip()
 
         # Determine API base URL
-        env_base_url = os.getenv("LLM_BASE_URL", "").strip()
-        if base_url:
-            self.base_url = base_url
-        elif env_base_url:
-            self.base_url = env_base_url
+        raw_base_url = (base_url if base_url is not None else os.getenv("LLM_BASE_URL", "")).strip()
+        if raw_base_url:
+            self.base_url = raw_base_url.rstrip("/")
         else:
-            self.base_url = PROVIDER_BASE_URLS.get(self.provider, "https://api.groq.com/openai/v1")
+            default_base_url = PROVIDER_BASE_URLS.get(self.provider, "https://api.groq.com/openai/v1")
+            self.base_url = default_base_url.strip().rstrip("/")
 
         raw_thresh = similarity_threshold if similarity_threshold is not None else os.getenv("SIMILARITY_THRESHOLD")
         self.similarity_threshold = float(raw_thresh) if raw_thresh is not None else DEFAULT_SIMILARITY_THRESHOLD
@@ -275,7 +279,28 @@ class AnswerGenerator:
 
         except Exception as exc:
             elapsed = (time.time() - start_time) * 1000
-            error_str = str(exc)
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                status_code = exc.response.status_code
+                error_detail = ""
+                try:
+                    err_json = exc.response.json()
+                    if isinstance(err_json, dict):
+                        err_obj = err_json.get("error")
+                        if isinstance(err_obj, dict):
+                            error_detail = err_obj.get("message") or str(err_obj)
+                        elif isinstance(err_obj, str):
+                            error_detail = err_obj
+                        elif "message" in err_json:
+                            error_detail = str(err_json["message"])
+                except Exception:
+                    pass
+
+                if not error_detail:
+                    error_detail = exc.response.text.strip() if exc.response.text else str(exc)
+
+                error_str = f"HTTP {status_code}: {error_detail}"
+            else:
+                error_str = str(exc)
             # Redact any accidental leakage of the API key in headers or error strings
             if self.api_key and self.api_key in error_str:
                 error_str = error_str.replace(self.api_key, "[REDACTED_API_KEY]")
