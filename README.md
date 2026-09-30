@@ -1,477 +1,442 @@
-# Blogger Engine: Precision RAG Search & QA Platform
+# Blogger Engine: Production RAG Search & QA Platform
 
-> A production-structured, CPU-compatible Retrieval-Augmented Generation (RAG) platform delivering grounded semantic search and verifiable citation-backed question answering over 8,242 technical machine learning publications (81,123 passage chunks).
+> A production-structured Retrieval-Augmented Generation (RAG) platform delivering grounded semantic search and verifiable citation-backed question answering over 8,242 technical publications (81,123 passage chunks).
 
 ---
 
 ## 1. Project Overview
 
-### What Blogger Engine Is
-**Blogger Engine** is an end-to-end, open-source RAG search and question-answering system. It transforms an unchunked, exploratory scraping script into a modular, production-hardened platform featuring:
-- **Hybrid Retrieval**: Dense bi-encoder search combined with BM25 lexical term matching fused via Reciprocal Rank Fusion (RRF).
-- **Neural Cross-Encoder Reranking**: Full cross-attention reranking over candidate passages on standard CPU.
-- **Document-Level Deduplication**: Guaranteed inter-document diversity in the top-3 context window.
-- **Grounded Synthesis & Citations**: Provider-agnostic LLM answer generation with strict `[Doc X]` bracketed citation attribution.
-- **Calibrated Confidence Refusal Gate**: Automatic refusal of out-of-domain or low-confidence queries before generation.
-- **$0/Month Serving Architecture**: Fully CPU-compatible inference requiring zero production GPUs and zero paid cloud databases.
+### What Blogger Engine Does
+**Blogger Engine** is an end-to-end RAG system designed for technical document search and grounded question answering. Given user queries over a corpus of engineering and machine learning publications, it retrieves the most relevant passages through a multi-stage hybrid pipeline, filters unconfident or out-of-domain queries, and synthesizes answers backed by explicit, verifiable in-text citations.
 
-### The Problem Being Solved
-Standard naive RAG implementations suffer from compounding failure modes when applied to technical corpus domains:
-1. **Silent Embedding Truncation**: Standard bi-encoders (e.g. `all-MiniLM-L6-v2`) truncate texts beyond 256 tokens (~180 words). Whole-document embeddings silently discard the body of long technical articles, collapsing document recall to **9.3%**.
-2. **Topical Semantic Crowding**: In dense technical domains (e.g. RLHF, DPO, PPO), multiple articles cover identical concepts. Dense retrieval frequently returns multiple chunks from rival articles or the same article, crowding out the specific answering text.
-3. **Vocabulary Mismatch & Entity Blindness**: Dense embeddings often struggle with exact mathematical acronyms, author citations, and library names (e.g., *DP-SGD*, *FlashAttention*, *Ivison et al.*), which BM25 captures with precision.
-4. **Context Window Exhaustion & Hallucination**: Feeding entire articles into LLM context prompts inflates token costs by >90%, causes "lost-in-the-middle" attention degradation, and leads to ungrounded hallucinations without source verification.
+### The Problem It Solves
+Standard naive RAG pipelines suffer from compounding failure modes on technical corpora:
+- **Silent Truncation**: Standard bi-encoders truncate long documents past 256 or 512 tokens. Embedding whole documents without sliding-window chunking collapses retrieval recall down to single digits.
+- **Topical Redundancy & Clustering**: In dense technical domains (e.g., RLHF, DPO, PPO), multiple chunks from the same document often crowd out competing relevant documents in the top-$k$ window.
+- **Entity Blindness**: Dense embeddings frequently miss exact identifiers, library names, mathematical acronyms, and author citations (*DP-SGD*, *FlashAttention*, *LoRA*), which lexical search captures reliably.
+- **Ungrounded Generation & Hallucination**: Passing unconstrained context or failing to detect queries that the corpus cannot answer causes models to hallucinate plausible but ungrounded answers.
+
+### End-to-End System Summary
+Blogger Engine ingests 8,242 deduplicated articles into 81,123 sliding-window chunks, combines BGE dense semantic search with BM25 lexical retrieval via Reciprocal Rank Fusion ($k=60$), refines candidate ordering using a neural cross-encoder, deduplicates results by document ID, guards synthesis with an empirical BGE confidence gate (threshold $0.65$), and generates cited answers using an OpenAI-compatible LLM endpoint with post-generation refusal classification.
 
 ---
 
-## 2. High-Level Architecture
+## 2. Key Features
 
-```
-User Query
-    │
-    ▼
-Frontend Client (app/static/index.html & style.css)
-    │  HTTP POST /api/search  |  HTTP POST /api/ask  (JSON: query, top_k=3)
-    ▼
-FastAPI Application Runtime (app/main.py)
-    │
-    ├──────────────────────────┬──────────────────────────┐
-    ▼                          ▼                          ▼
-BGE Dense Retrieval         BM25 Lexical Retrieval     Query Logging (SQLite)
-(BAAI/bge-small-en-v1.5)    (rank-bm25 BM25Okapi)      (ephemeral-safe)
-FAISS IndexFlatIP (384d)    Tokenized Chunks Cache
-81,123 vectors              81,123 passages
-[Top-20 Candidates]         [Top-20 Candidates]
-    │                          │
-    └──────────────┬───────────┘
-                   ▼
-       Reciprocal Rank Fusion (RRF, k=60)
-       [Top-20 Fused Candidates]
-                   │
-                   ▼
-       Cross-Encoder Reranking
-       (cross-encoder/ms-marco-MiniLM-L-6-v2)
-       [20 (query, passage) pairs scored jointly via cross-attention]
-                   │
-                   ▼
-       Document-Level Deduplication
-       [Groups by unique doc_id; retains highest-scoring chunk per article]
-                   │
-                   ▼
-       Top-3 Final Diverse Passages (top_k=3)
-                   │
-                   ├─────────────────────────────────────────────────┐
-                   │ (Search Mode)                                   │ (QA Mode)
-                   ▼                                                 ▼
-          Search Response JSON                         Confidence Gate (0.65)
-          (ranked passages, scores,                      │
-           metadata, latency breakdown)                  ├── Top Score < 0.65:
-                                                         │     Refuse Answer
-                                                         │     (Zero LLM calls)
-                                                         │
-                                                         └── Top Score >= 0.65:
-                                                               Grounded Prompt Assembly
-                                                               │
-                                                               ▼
-                                                               LLM Generation
-                                                               (Groq / Gemini / OpenAI)
-                                                               │
-                                                               ▼
-                                                               Answer + Verified Citations
+- **Hybrid Dense + Sparse Retrieval**: Combines dense semantic representations with BM25 keyword matching to handle both conceptual queries and exact entity names.
+- **BGE Embeddings**: Uses `BAAI/bge-small-en-v1.5` (384-dimensional normalized vectors) with search-optimized query instruction prefixes.
+- **BM25 Lexical Retrieval**: Employs `rank-bm25` (BM25Okapi) over tokenized text for precise term matching.
+- **Reciprocal Rank Fusion (RRF)**: Merges dense and sparse rankings ($k=60$) without requiring brittle cross-model score normalization.
+- **Cross-Encoder Neural Reranking**: Applies `cross-encoder/ms-marco-MiniLM-L-6-v2` joint cross-attention over candidate passage pairs.
+- **Document-Level Deduplication**: Enforces inter-document diversity by keeping only the single highest-scoring chunk per document in the final top-3 context window.
+- **Empirical Retrieval-Confidence Gate**: Uses an empirical threshold of $0.65$ on the maximum BGE cosine similarity among top-3 retrieved passages to reject low-confidence queries before generation.
+- **Grounded LLM Synthesis**: Formats prompt contexts with structured `[Doc X]` tags and strictly instructs the LLM to synthesize only from provided passages.
+- **Citation Extraction**: Parses bracketed citations from generated text, mapping them back to database metadata (title, URL, chunk ID, author).
+- **Post-Generation Refusal Handling**: Detects canonical and variant insufficient-evidence statements from the LLM, setting `refused: true` and suppressing empty or hallucinated citations.
+- **FastAPI Backend**: Fully async-ready REST API with strict Pydantic schemas, application lifecycle management, and thread-safe warmup.
+- **SQLite + FAISS Persistence**: Stores full chunk metadata in SQLite and dense vectors in a FAISS `IndexFlatIP` index with deterministic ID mapping.
+- **Dockerized Deployment**: Multi-stage, CPU-optimized container running non-root on Oracle Cloud Infrastructure (ARM64 Ampere A1).
+
+---
+
+## 3. Architecture
+
+```mermaid
+flowchart TD
+    User([User Query]) --> API[FastAPI /api/ask]
+
+    subgraph Stage1["Stage 1: Multi-Index Candidate Retrieval"]
+        API --> Dense[BGE Bi-Encoder + FAISS<br/>Top-20 Dense Candidates]
+        API --> Sparse[BM25Okapi Lexical Search<br/>Top-20 Sparse Candidates]
+    end
+
+    Dense --> RRF[Reciprocal Rank Fusion k=60<br/>Pool: Top-20 Fused Candidates]
+    Sparse --> RRF
+
+    subgraph Stage2["Stage 2: Neural Reranking & Diversity"]
+        RRF --> CE[Cross-Encoder ms-marco-MiniLM-L-6-v2<br/>Joint Cross-Attention Scoring]
+        CE --> Dedup[Document Deduplication<br/>1 Best Chunk per Unique doc_id]
+        Dedup --> Top3[Final Top-3 Passages]
+    end
+
+    subgraph Stage3["Stage 3: Gating & Grounded Synthesis"]
+        Top3 --> Gate{Max BGE Cosine Sim >= 0.65?}
+        Gate -- No --> RefuseGate[Return 200 OK<br/>refused: true<br/>citations: empty]
+        Gate -- Yes --> Prompt[Assemble Grounded Context<br/>[Doc 1], [Doc 2], [Doc 3]]
+        Prompt --> LLM[LLM Generation<br/>Groq API]
+        LLM --> PostGen{Detect Refusal Phrasing?}
+        PostGen -- Yes --> RefusePost[Return 200 OK<br/>refused: true<br/>citations: empty]
+        PostGen -- No --> Success[Return 200 OK<br/>refused: false<br/>citations: populated]
+    end
 ```
 
----
-
-## 3. Data Pipeline & Ingestion
-
-1. **Corpus Extraction & Deduplication**:
-   - Starting from 8,925 raw scraped web articles, MD5-hashed URL normalization and content hashing identified and consolidated duplicate mirror posts.
-   - Result: **8,242 unique canonical technical articles**.
-2. **Sliding-Window Chunking (`app/core/chunker.py`)**:
-   - Chunks articles into ~400-word passages with a 50-word sliding overlap.
-   - Preserves complete article coverage while eliminating silent truncation.
-   - Generates **81,123 canonical passage chunks**.
-   - Every chunk is deterministically identified by SHA-256 derived `doc_id` and indexed chunk ID (`{doc_id}_c{idx}`).
-3. **Relational & Vector Persistence**:
-   - **SQLite (`data/blogger_dedup.db`)**: Stores full text, titles, URLs, authors, word counts, and deterministic `faiss_id` mappings [0..81122].
-   - **FAISS IndexFlatIP (`indexes/faiss_chunked_bge_dedup.index`)**: Stores 81,123 L2-normalized 384-dimensional dense vectors for exact inner product cosine search.
-   - **BM25 Cache (`indexes/bm25_chunked_dedup.pkl`)**: In-memory serialized token index for sub-second startup.
+### Request Flow
+1. **User Query**: Incoming HTTP `POST /api/ask` request with query string and optional parameter overrides.
+2. **Dense Search**: Query is prefixed (`Represent this sentence for searching relevant passages: `) and embedded via `bge-small-en-v1.5`, searching 81,123 vectors in FAISS for top-20 candidates.
+3. **Sparse Search**: Tokenized query runs against pre-cached `BM25Okapi` index over 81,123 passage documents for top-20 candidates.
+4. **Reciprocal Rank Fusion**: Ranks are fused via $RRF(d) = \sum \frac{1}{60 + \text{rank}(d)}$, creating a unified top-20 candidate pool.
+5. **Cross-Encoder Reranking**: All 20 `(query, passage)` pairs are scored jointly via full cross-attention with `cross-encoder/ms-marco-MiniLM-L-6-v2`.
+6. **Document Deduplication**: Candidates are grouped by `doc_id`, keeping only the highest-scoring chunk per document to guarantee distinct sources in the context.
+7. **Top-3 Selection & Score Mapping**: Top-3 unique documents are selected, preserving exact BGE cosine similarity scores for confidence gating.
+8. **BGE Confidence Gate**: Evaluates maximum BGE cosine similarity against the empirical threshold ($0.65$). If $< 0.65$, refuses immediately without calling the LLM.
+9. **Grounded Prompt Assembly**: Context chunks are formatted with `[Doc 1]`, `[Doc 2]`, `[Doc 3]` source tags and sent with strict anti-hallucination instructions.
+10. **LLM Generation & Refusal Detection**: LLM generates an answer. If generation indicates insufficient context, the system flags `refused: true` and clears citations; otherwise, valid citations are extracted and returned.
 
 ---
 
-## 4. Retrieval Architecture (Canonical Experiment 4)
+## 4. Retrieval Design
 
-Blogger Engine employs a two-stage hybrid retrieval and reranking pipeline:
+Blogger Engine implements the finalized, empirically validated **Canonical Experiment 4** configuration:
 
-### Component Breakdown
-1. **Dense Bi-Encoder (`BAAI/bge-small-en-v1.5`)**:
-   - 384 dimensions, 512-token sequence capacity (2x larger than MiniLM).
-   - Generates semantic query representations with task-specific prefix: `"Represent this sentence for searching relevant passages: "`. Document passages are embedded raw.
-   - L2 normalized so FAISS `IndexFlatIP` performs exact cosine similarity in ~26 ms on CPU.
-2. **Sparse Lexical Retrieval (`rank-bm25 BM25Okapi`)**:
-   - Tokenizes text with lowercasing and punctuation stripping.
-   - Computes BM25 inverse document frequency scores over all 81,123 chunks in ~430 ms on CPU.
-   - Solves entity blindness, recovering exact technical terms (e.g. *LoRA*, *DP-SGD*, *ViT*).
-3. **Reciprocal Rank Fusion (RRF)**:
-   - Fuses dense rank and sparse rank without requiring brittle score normalization:
-     $$RRF(d) = \sum_{m \in \{\text{dense}, \text{sparse}\}} \frac{1}{60 + \text{rank}_m(d)}$$
-   - Candidate pool depth: $N=20$.
-4. **Cross-Encoder Neural Reranking (`cross-encoder/ms-marco-MiniLM-L-6-v2`)**:
-   - Unlike bi-encoders that encode query and document separately, the cross-encoder feeds `(query, passage)` pairs jointly through full transformer cross-attention.
-   - Evaluates all 20 candidates on CPU in ~870 ms.
-   - Maps raw logits through sigmoid to produce calibrated relevance scores in $[0, 1]$.
-5. **Document-Level Deduplication**:
-   - Groups reranked candidates by `doc_id`.
-   - Retains only the single highest-scoring chunk per document, guaranteeing that the top-3 slots represent 3 distinct articles rather than redundant chunks from a single article.
-6. **Confidence Refusal Gate (`similarity_threshold = 0.65`)**:
-   - If the top passage relevance score is below `0.65`, the system refuses immediately:
-     *"I do not have enough confidence in the indexed blog articles to answer this question."*
-   - Prevents ungrounded synthesis and hallucination on out-of-domain queries while consuming zero LLM tokens.
-
----
-
-## 5. Why CPU-Only Serving Is Possible
-
-Blogger Engine requires **zero production GPUs**:
-- **Lightweight Models**: `bge-small-en-v1.5` has 33M parameters; `ms-marco-MiniLM-L-6-v2` has 22M parameters. Both run efficiently on modern x86 CPU cores.
-- **Exact Vector Search Efficiency**: At 81,123 vectors of 384 dimensions, a brute-force `IndexFlatIP` inner product matrix multiplication requires only ~31 million floating-point operations. On CPU with OpenMP (`libgomp`), this completes in **~26 ms**.
-- **Stage 2 Bounded Scoring**: Cross-attention reranking is restricted to the top-20 fused candidates, keeping CPU reranking time under **~870 ms**.
-- **Total Mean Retrieval Latency**: **~1.47 seconds** per query on a standard multi-core CPU.
-
----
-
-## 6. API Endpoints
-
-The FastAPI server provides strict, schema-validated REST endpoints:
-
-### `GET /health`
-Liveness probe checking vector engine and database connectivity.
-```json
-{
-  "status": "ok",
-  "index_loaded": true,
-  "db_connected": true,
-  "version": "1.0.0"
-}
-```
-*(Returns `status: "degraded"` and `index_loaded: false` if models or indexes fail to initialize).*
-
-### `GET /api/stats`
-Corpus and active configuration analytics.
-```json
-{
-  "total_documents": 8242,
-  "total_chunks": 81123,
-  "total_vectors": 81123,
-  "embedding_model": "BAAI/bge-small-en-v1.5",
-  "llm_provider": "groq",
-  "llm_model": "llama-3.1-8b-instant",
-  "query_logging_enabled": true
-}
-```
-
-### `POST /api/search`
-Execute hybrid dense + BM25 search with cross-encoder reranking and document deduplication.
-- **Request**:
-  ```json
-  {
-    "query": "What is Direct Preference Optimization DPO?",
-    "top_k": 3,
-    "min_score": null
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    "query": "What is Direct Preference Optimization DPO?",
-    "total_results": 3,
-    "latency_ms": 1142.3,
-    "results": [
-      {
-        "rank": 1,
-        "score": 0.8245,
-        "chunk_id": "a1b2c3d4e5f6_c2",
-        "doc_id": "a1b2c3d4e5f6",
-        "chunk_index": 2,
-        "title": "Direct Preference Optimization: Your Language Model is Secretly a Reward Model",
-        "url": "https://example.com/blog/dpo-overview",
-        "author": "Eric Mitchell",
-        "content": "Direct Preference Optimization (DPO) optimizes the policy directly...",
-        "word_count": 395,
-        "faiss_id": 14205
-      }
-    ]
-  }
-  ```
-
-### `POST /api/ask`
-Execute full RAG question answering with citations and refusal gating.
-- **Request**:
-  ```json
-  {
-    "query": "What is RLAIF and how does it differ from RLHF?",
-    "top_k": 3,
-    "similarity_threshold": 0.65
-  }
-  ```
-- **Response (In-Domain)**:
-  ```json
-  {
-    "query": "What is RLAIF and how does it differ from RLHF?",
-    "answer": "RLAIF (Reinforcement Learning from AI Feedback) uses an LLM to generate preference labels [Doc 1], whereas traditional RLHF relies on human annotators [Doc 2]...",
-    "refused": false,
-    "confidence_score": 0.7709,
-    "citations": [
-      {
-        "doc_tag": "[Doc 1]",
-        "chunk_id": "8f3b2e1a9c0d_c1",
-        "title": "RLAIF: Scaling Reinforcement Learning from AI Feedback",
-        "url": "https://example.com/blog/rlaif-scaling",
-        "score": 0.7709
-      }
-    ],
-    "sources": [ ... ],
-    "latency_ms": 1380.5,
-    "model": "llama-3.1-8b-instant",
-    "provider": "groq"
-  }
-  ```
-- **Response (Out-of-Domain Refusal)**:
-  ```json
-  {
-    "query": "How to bake authentic Neapolitan sourdough pizza?",
-    "answer": "I do not have enough confidence in the indexed blog articles to answer this question (top similarity: 0.58 is below required threshold: 0.65).",
-    "refused": true,
-    "confidence_score": 0.5841,
-    "citations": [],
-    "sources": [ ... ],
-    "latency_ms": 1050.2,
-    "model": "llama-3.1-8b-instant",
-    "provider": "groq"
-  }
-  ```
-
----
-
-## 7. Configuration & Environment Variables
-
-All settings are managed via `pydantic-settings` in [app/config.py](file:///d:/Blogger-Engine-main/app/config.py) and can be overridden via environment variables or a local `.env` file:
-
-| Environment Variable | Canonical Default | Description |
+| Component | Specification | Operational Role |
 | :--- | :--- | :--- |
-| `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | Dense bi-encoder SentenceTransformer model |
-| `FAISS_INDEX_PATH` | `indexes/faiss_chunked_bge_dedup.index` | Path to production FAISS IndexFlatIP index |
-| `SQLITE_DB_PATH` | `data/blogger_dedup.db` | Path to canonical SQLite chunks database |
-| `BM25_CACHE_PATH` | `indexes/bm25_chunked_dedup.pkl` | Path to pre-tokenized BM25 cache file |
-| `RERANKER_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Cross-encoder neural reranker model |
-| `TOP_K` | `3` | Default number of final context passages |
-| `SIMILARITY_THRESHOLD` | `0.65` | Confidence gate refusal threshold |
-| `CANDIDATE_DEPTH` | `20` | Depth for dense and BM25 candidate retrieval |
-| `RERANK_DEPTH` | `20` | Depth for cross-encoder reranking |
-| `RRF_K` | `60` | Reciprocal Rank Fusion constant ($k$) |
-| `DOC_DEDUP` | `True` | Group by document and drop intra-doc duplicates |
-| `USE_RERANKER` | `True` | Enable neural cross-encoder reranking stage |
-| `LLM_PROVIDER` | `groq` | Supported: `groq`, `gemini`, `openai`, `ollama` |
-| `LLM_MODEL` | `llama-3.1-8b-instant` | Model identifier for generation |
-| `LLM_API_KEY` | `""` | API key for external LLM provider |
-| `LLM_BASE_URL` | `""` | Custom OpenAI-compatible base URL |
-| `CORS_ORIGINS` | `""` | Comma-separated allowed origins (defaults to wildcard) |
-| `HOST` | `0.0.0.0` | Server host binding |
-| `PORT` | `8000` | Server port binding (dynamically overridable) |
+| **Embedding Model** | `BAAI/bge-small-en-v1.5` | 384-dimensional dense semantic vectors with query instruction prefix |
+| **Vector Normalization** | L2 Unit Normalization | Allows inner product search in FAISS to compute exact cosine similarity |
+| **Vector Index** | FAISS `IndexFlatIP` | Exact brute-force vector search (~26 ms for 81,123 vectors on CPU) |
+| **Sparse Index** | `rank-bm25` (BM25Okapi) | Tokenized inverted index for technical terms, entities, and acronyms |
+| **Rank Fusion** | Reciprocal Rank Fusion ($k=60$) | Calibration-free rank merging across dense and sparse candidate sets |
+| **Candidate Pool Depth** | $N = 20$ | Candidate depth retrieved from dense and BM25 search |
+| **Neural Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Joint cross-attention scoring across the top-20 fused candidate pool |
+| **Rerank Depth** | 20 pairs | Bounded cross-encoder scoring depth (~870 ms CPU latency budget) |
+| **Deduplication** | Document-Level (`doc_id`) | Retains single highest-scoring chunk per unique article |
+| **Output Depth** | $\text{top\_k} = 3$ | Context window provided to the LLM (3 distinct documents) |
+| **Confidence Metric** | Max BGE Cosine Similarity | Maximum cosine similarity among the final top-3 retrieved documents |
+| **Confidence Threshold** | $0.65$ | Empirical threshold on maximum BGE cosine similarity for gating |
 
 ---
 
-## 8. Running Locally
+## 5. Evaluation
+
+The retrieval pipeline was quantitatively evaluated against a frozen 60-query benchmark dataset (`data/eval_dataset_full.json`), comprising 54 in-domain technical machine learning queries and 6 out-of-domain probes, evaluated at output depth $k=3$:
+
+| Metric | Whole-Doc Baseline (Exp 0) | Canonical Production (Exp 4) | Absolute Delta | Relative Gain |
+| :--- | :---: | :---: | :---: | :---: |
+| **Document Recall@3** | 46.3% (25/54) | **66.7% (36/54)** | **+20.4 pp** | **+44.1%** |
+| **Passage Recall@3** | 27.8% (15/54) | **46.3% (25/54)** | **+18.5 pp** | **+66.5%** |
+| **Citation Source Accuracy** | 77.2% | **84.6%** | **+7.4 pp** | **+9.6%** |
+| **Lexical Groundedness** | 83.0% | **82.1%** | -0.9 pp | -1.1% |
+| **Mean Unique Docs in Top-3** | 2.50 docs | **3.00 docs** | **+0.50 docs** | **100% Inter-Doc Diversity** |
+| **Context Compression** | 90.7% | **90.4%** | -0.3 pp | ~1,948 prompt tokens vs ~20,199 baseline |
+| **Mean Retrieval Latency (CPU)** | 18.52 ms | **1,469.89 ms** | +1.45 s | Trade-off for cross-attention accuracy |
+
+### Metric Definitions
+- **Document Recall@3**: Proportion of in-domain queries where the true source document appears in the final top-3 results.
+- **Passage Recall@3**: Proportion of in-domain queries where the specific answering chunk appears in the top-3 results.
+- **Citation Source Accuracy**: Proportion of generated citations that match the ground-truth target documents.
+- **Lexical Groundedness**: Token-level lexical overlap between generated responses and retrieved context passages.
+- **Context Compression**: Token reduction achieved by sliding-window chunking relative to unchunked full-document feeding.
+
+---
+
+## 6. Threshold Calibration
+
+To establish a defensible gating threshold without overfitting the benchmark, a held-out calibration set of **30 queries** (`data/calibration_dataset.json`) was evaluated:
+- **20 In-Domain Technical Queries**: Sampled from documents strictly disjoint from benchmark target documents.
+- **10 Out-of-Domain (OOD) Probes**: Topics absent from the corpus (e.g., culinary recipes, gardening, quantum mechanics).
+
+### Score Distributions (Maximum BGE Cosine Similarity)
+
+| Partition | Min Score | Mean Score | Median Score | Max Score |
+| :--- | :---: | :---: | :---: | :---: |
+| **In-Domain (20 queries)** | **0.7423** | 0.8356 | 0.8355 | 0.9046 |
+| **Out-of-Domain (10 queries)** | 0.5441 | 0.6047 | 0.6095 | **0.6464** |
+
+### Calibration Conclusion & Selection
+- **Observed Separation Margin**: A **+0.0959 gap** exists between the highest OOD probe (`0.6464`) and the lowest in-domain query (`0.7423`).
+- **Selected Threshold**: **`0.65`**
+  - Positioned above the highest OOD probe (`0.6464`) with safety headroom.
+  - Leaves a **+0.0923 buffer** below the lowest in-domain score (`0.7423`), ensuring **0 false refusals** across all 54 in-domain benchmark queries.
+- **Defensible Scope**: The 0.65 threshold operates as an **empirical retrieval-confidence gate**, *not* a universal out-of-distribution classifier. Queries that share superficial semantic vocabulary with the corpus can score above 0.65 despite lacking answering facts; such cases are handled by post-generation refusal detection.
+
+---
+
+## 7. LLM Grounding & Refusal Semantics
+
+The `/api/ask` endpoint provides a unified, defensible response contract:
+
+> **`refused: bool` indicates whether the system was unable or declined to provide a factual, grounded answer based on the indexed corpus.**
+
+### Refusal Pathways
+```
+Case 1: Retrieval Confidence Gate Rejection
+  Trigger: Top BGE cosine similarity < 0.65 (or 0 passages found)
+  Behavior: Immediate refusal before generation. Zero LLM calls.
+  Output: refused: true, citations: []
+  Message: "I do not have enough confidence in the indexed blog articles to answer this question..."
+
+Case 2: Post-Generation Evidence Insufficiency
+  Trigger: Retrieval passes >= 0.65, but retrieved passages lack facts to answer.
+  Behavior: LLM follows prompt Rule 3, outputting standard insufficiency phrasing.
+  Detection: AnswerGenerator regex pattern matches canonical & variant refusal phrases.
+  Output: refused: true, citations: [] (suppresses hallucinated/extraneous citations)
+
+Case 3: Grounded Answer Generation
+  Trigger: Retrieval passes >= 0.65 and context contains answering facts.
+  Behavior: LLM generates affirmative answer with [Doc X] bracketed citations.
+  Output: refused: false, citations: [CitationItem, ...]
+```
+
+---
+
+## 8. Engineering Decisions
+
+| Architectural Choice | Decision | Technical Rationale |
+| :--- | :--- | :--- |
+| **Retrieval Strategy** | Hybrid (BGE + BM25) | Dense bi-encoders alone miss exact entities, acronyms, and technical citations (*LoRA*, *DP-SGD*). BM25 handles lexical precision while BGE handles semantic concepts. |
+| **Fusion Algorithm** | Reciprocal Rank Fusion (RRF) | Avoids fragile min-max score normalization between bounded cosine similarities $[-1, 1]$ and unbounded BM25 scores $[0, \infty)$. Parameter-free ($k=60$). |
+| **Reranking Method** | Neural Cross-Encoder | Bi-encoders compress documents into independent vectors; cross-encoders process full query-document token interactions via cross-attention, boosting passage recall from 27.8% to 46.3%. |
+| **Deduplication** | Document-Level (`doc_id`) | Without deduplication, top-3 slots frequently contain 2–3 chunks from the same long article. Deduplication guarantees 3 distinct sources in the context window. |
+| **Vector Engine** | FAISS `IndexFlatIP` | At 81,123 vectors of 384 dimensions, brute-force inner product requires only ~31M FLOPs, executing in ~26 ms on CPU with OpenMP. Eliminates IVF/HNSW approximation recall loss. |
+| **Relational Storage** | SQLite (`blogger_dedup.db`) | Single-file, zero-maintenance relational storage with integer primary keys and indexing. Ideal for local and containerized read-heavy workloads. |
+| **Web Framework** | FastAPI | High-performance async ASGI framework with automatic OpenAPI documentation, dependency injection, and Pydantic v2 validation. |
+| **Containerization** | Multi-Stage Docker | Pre-caches model weights to run offline (`TRANSFORMERS_OFFLINE=1`), builds with CPU-only wheels, and enforces non-root execution (`appuser:10001`). |
+
+---
+
+## 9. Deployment Architecture
+
+Blogger Engine is deployed and validated on cloud infrastructure:
+
+- **Hosting Platform**: Oracle Cloud Infrastructure (OCI) Virtual Machine
+- **Operating System**: Ubuntu 24.04 LTS
+- **Architecture**: ARM64 / aarch64 (Ampere A1 Compute, 4 OCPUs, 24 GB RAM)
+- **Container Runtime**: Docker Engine running `blogger-engine:arm64`
+- **Application Process**: Uvicorn running FastAPI behind a non-root container profile
+- **LLM Integration**: OpenAI-compatible chat completion provider (`groq`) using `openai/gpt-oss-20b`
+- **Networking**: Container port 8000 exposed to host loopback and public HTTP endpoints
+
+---
+
+## 10. API Usage
+
+### 1. Grounded Question Answering (`POST /api/ask`)
+
+#### Request: In-Domain Query
+```bash
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is Docker and how do containers work?"}'
+```
+
+#### Response: Successful Grounded Answer (`refused: false`)
+```json
+{
+  "query": "What is Docker and how do containers work?",
+  "answer": "Docker is a container-runtime tool that lets you package an application together with all of its libraries, system tools, and runtime into a single, portable unit called an image... Containers share the host operating-system kernel [Doc 1][Doc 2]...",
+  "refused": false,
+  "confidence_score": 0.8265,
+  "citations": [
+    {
+      "doc_tag": "[Doc 1]",
+      "chunk_id": "a9f3b1c2d0e4_c1",
+      "title": "Lecture 11: Deployment & Monitoring - The Full Stack",
+      "url": "https://example.com/deployment-monitoring",
+      "score": 0.8265
+    },
+    {
+      "doc_tag": "[Doc 2]",
+      "chunk_id": "8b2e1f4a9c3d_c0",
+      "title": "What is Container Orchestration? Explained",
+      "url": "https://example.com/container-orchestration",
+      "score": 0.7363
+    }
+  ],
+  "sources": [ ... ],
+  "latency_ms": 6084.94,
+  "model": "openai/gpt-oss-20b",
+  "provider": "groq"
+}
+```
+
+#### Request: Out-of-Domain or Insufficient-Evidence Query
+```bash
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How do I repair a bicycle tire?"}'
+```
+
+#### Response: Refusal (`refused: true`)
+```json
+{
+  "query": "How do I repair a bicycle tire?",
+  "answer": "I do not have enough information in the provided blog articles to answer this question.",
+  "refused": true,
+  "confidence_score": 0.6602,
+  "citations": [],
+  "sources": [ ... ],
+  "latency_ms": 5786.93,
+  "model": "openai/gpt-oss-20b",
+  "provider": "groq"
+}
+```
+
+### 2. Semantic Search (`POST /api/search`)
+```bash
+curl -X POST http://localhost:8000/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Direct Preference Optimization DPO", "top_k": 3}'
+```
+
+### 3. Service Health & Metadata (`GET /health`, `GET /api/stats`)
+```bash
+curl http://localhost:8000/health
+# {"status":"ok","index_loaded":true,"db_connected":true,"version":"1.0.0"}
+
+curl http://localhost:8000/api/stats
+# {"total_documents":8242,"total_chunks":81123,"total_vectors":81123,...}
+```
+
+---
+
+## 11. Project Structure
+
+```
+Blogger-Engine/
+├── app/
+│   ├── api/
+│   │   └── routes.py              # REST routes: /health, /api/stats, /api/search, /api/ask
+│   ├── core/
+│   │   ├── chunker.py             # 400-word sliding-window chunker with 50-word overlap
+│   │   ├── embedder.py            # BGE-small bi-encoder with query task instruction prefix
+│   │   ├── generator.py           # LLM generation, citation extraction & refusal classification
+│   │   ├── hybrid_retriever.py    # Canonical Exp 4 engine (Dense + BM25 + RRF + Cross-Encoder + Dedup)
+│   │   └── retriever.py           # Base FAISS IndexFlatIP dense retriever wrapper
+│   ├── db/
+│   │   └── database.py            # SQLite connection pool, query logging, chunk retrieval
+│   ├── static/
+│   │   ├── index.html             # Single-page editorial client interface
+│   │   └── style.css              # Custom responsive typography and layout design system
+│   ├── config.py                  # Pydantic Settings with whitespace sanitization
+│   ├── main.py                    # Lifespan startup, model warmup & application factory
+│   └── schemas.py                 # Pydantic v2 request/response schemas with contract docs
+├── data/
+│   ├── blogger_dedup.db           # Canonical SQLite database (8,242 articles, 81,123 chunks)
+│   ├── eval_dataset_full.json     # Frozen 60-query benchmark dataset
+│   └── calibration_dataset.json   # 30-query held-out threshold calibration dataset
+├── indexes/
+│   ├── faiss_chunked_bge_dedup.index # FAISS IndexFlatIP (81,123 vectors, 384d)
+│   └── bm25_chunked_dedup.pkl     # Pre-tokenized BM25Okapi cache
+├── scripts/                       # Ingestion, benchmarking & calibration analysis scripts
+├── tests/
+│   ├── test_phase1.py             # Chunker & SQLite CRUD tests (6 tests)
+│   ├── test_phase2.py             # Embedder & generator unit tests (14 tests)
+│   ├── test_phase3.py             # API route integration tests (8 tests)
+│   ├── test_phase4.py             # Evaluation harness tests (6 tests)
+│   ├── test_hybrid_retriever.py   # HybridRetriever & concurrency isolation tests (21 tests)
+│   ├── test_phase5_step4.py       # Lifespan wiring & degradation tests (8 tests)
+│   ├── test_phase5_step5.py       # Frontend contract tests (5 tests)
+│   ├── test_phase5_step6_e2e.py   # End-to-end integration tests (10 tests)
+│   ├── test_phase5_step7_docker.py# Docker build & packaging specification tests (6 tests)
+│   └── test_phase6_llm_hardening.py# LLM config sanitization & refusal regression tests (10 tests)
+├── Dockerfile                     # Multi-stage production container specification
+├── .dockerignore                  # Strict packaging exclusion rules
+├── requirements.txt               # Locked production dependencies
+├── PROGRESS.md                    # Detailed engineering and evaluation log
+└── PROJECT_HANDOFF.md             # Production handoff and deployment guide
+```
+
+*Test Suite Status*: **94 passed tests**, 0 failed across all suites (`pytest -v`).
+
+---
+
+## 12. Limitations
+
+1. **Similarity Threshold is Not a Classifier**: The 0.65 BGE cosine similarity gate is an empirical confidence heuristic. An out-of-domain query that contains engineering buzzwords may produce a score $\ge 0.65$; the system relies on post-generation refusal classification as a secondary defense.
+2. **CPU Retrieval Latency**: Computing full cross-attention over 20 candidate pairs using CPU takes ~870 ms, leading to a mean retrieval latency of ~1.47 s. In a GPU environment, this would run in <30 ms.
+3. **Candidate-Window Limitation**: 18 of 54 in-domain benchmark queries were missed at the final top-3 stage; forensic analysis found 11 reranker misranks, 6 first-stage retrieval misses, and 1 target outside the cross-encoder's top-20 reranking window.
+4. **External Artifact Distribution**: Large binary artifacts (`faiss_chunked_bge_dedup.index` at 119 MB, `blogger_dedup.db` at 314 MB, and `bm25_chunked_dedup.pkl` at 177 MB) exceed standard Git limits and are managed via release artifacts or container builds rather than direct Git tracking.
+
+---
+
+## 13. Research & Evolution Summary
+
+The retrieval pipeline evolved across structured experimental phases:
+
+```
+[Baseline: Whole-Doc MiniLM]
+  - Doc Recall@3: 46.3% | Passage Recall@3: 27.8%
+  - Silent truncation beyond 256 tokens; entity blindness on technical terms.
+         │
+         ▼
+[Exp 1: BGE-small Dense Bi-Encoder]
+  - 512-token context capacity, 384 dimensions.
+  - Doc Recall@3 remained flat at 46.3% due to dense topical crowding.
+         │
+         ▼
+[Exp 2: Hybrid BGE + BM25Okapi + RRF (k=60)]
+  - Doc Recall@3 jumped to 57.4% (+11.1 pp).
+  - BM25 rescued exact acronyms and author names missed by dense embeddings.
+         │
+         ▼
+[Exp 3: Document-Level Deduplication]
+  - Doc Recall@3 reached 61.1% (+3.7 pp).
+  - Enforced 100% inter-document diversity (3.00 unique articles in top-3).
+         │
+         ▼
+[Exp 4: Cross-Encoder Neural Reranking (Canonical Production)]
+  - ms-marco-MiniLM-L-6-v2 joint cross-attention over top-20 fused candidates.
+  - Final Doc Recall@3: 66.7% (+20.4 pp over baseline).
+  - Final Passage Recall@3: 46.3% (+18.5 pp over baseline).
+```
+
+### Discarded Approaches
+- **Pseudo-Relevance Feedback (Exp 5)**: Augmenting queries with top BM25 keywords yielded 0.0 pp recall gain and caused semantic drift.
+- **Deeper Candidate Pools ($N=50$)**: Scored 50 cross-encoder pairs. Increased latency by +1.8 s for a marginal +1.8 pp recall gain.
+- **Linear Score Normalization**: Min-max addition of BM25 and dense scores proved unstable across varying query lengths compared to rank-based RRF.
+- **12-Layer Cross-Encoder (L-12)**: Doubled reranker latency to 1.7 s on CPU without measurable recall improvement over the 6-layer model.
+
+---
+
+## 14. Quick Start
 
 ### Prerequisites
 - Python 3.11+
 - Git
+- 1+ GB RAM available
 
-### Quickstart
+### Local Installation
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-username/blogger-engine.git
-cd blogger-engine
+# 1. Clone repository
+git clone https://github.com/anirudha125/Blogger-Engine.git
+cd Blogger-Engine
 
-# 2. Create and activate a virtual environment
+# 2. Set up virtual environment
 python -m venv .venv
-source .venv/bin/activate   # Linux/macOS
-# or: .venv\Scripts\activate   # Windows
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# 3. Install dependencies
-# On Linux/macOS, install CPU-only PyTorch first for minimal footprint:
+# 3. Install CPU-only PyTorch and dependencies
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 
-# 4. Optional: Configure LLM API credentials
-cp .env.example .env
-# Edit .env to set GROQ_API_KEY or OPENAI_API_KEY (optional; returns offline notice if omitted)
+# 4. Canonical Artifacts Setup
+# Ensure data/blogger_dedup.db and indexes/ exist.
+# If data/blogger_dedup.db.gz is present:
+# python -c "import gzip, shutil; shutil.copyfileobj(gzip.open('data/blogger_dedup.db.gz', 'rb'), open('data/blogger_dedup.db', 'wb'))"
 
-# 5. Start the production FastAPI server
+# 5. Configure environment variables (optional for QA mode)
+cp .env.example .env
+# Edit .env to supply LLM_API_KEY if testing live generation
+
+# 6. Run the test suite
+pytest -v
+
+# 7. Start the FastAPI development server
 uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
 ```
-- Open your browser to `http://localhost:8000` to interact with the luxury editorial UI.
-- Interactive OpenAPI documentation is available at `http://localhost:8000/docs`.
+Visit `http://localhost:8000` to interact with the search and QA frontend, or `http://localhost:8000/docs` for interactive Swagger documentation.
 
 ---
 
-## 9. Docker Deployment
+## 15. Tech Stack
 
-### Packaging Strategy
-A production multi-stage [Dockerfile](file:///d:/Blogger-Engine-main/Dockerfile) and [.dockerignore](file:///d:/Blogger-Engine-main/.dockerignore) are provided:
-- **Multi-Stage Build**: Isolates build tools in a temporary builder stage; final runner image contains only `python:3.11-slim` and `libgomp1`.
-- **Pre-Cached Models**: Model weights for BGE-small and Cross-Encoder MiniLM are pre-downloaded during build. The container runs with `TRANSFORMERS_OFFLINE=1` and `HF_HUB_OFFLINE=1` for deterministic, network-free startup.
-- **Non-Root User**: Runs as `appuser:appgroup` (UID 10001).
-- **Dynamic Port Support**: Conforms to cloud platform requirements (`Render`, `Railway`, `Fly.io`, `Google Cloud Run`) via `PORT` environment variable.
-
-### Building & Running the Container
-```bash
-# Build the production image
-docker build -t blogger-engine .
-
-# Run the container locally (listen on 8000)
-docker run -p 8000:8000 -e LLM_API_KEY="your-api-key" blogger-engine
-```
-
-> **Deployment Validation Notice**:
-> The `Dockerfile` and `.dockerignore` were developed, linted, and verified via automated static specification tests ([`tests/test_phase5_step7_docker.py`](file:///d:/Blogger-Engine-main/tests/test_phase5_step7_docker.py)). However, because Docker CLI was not installed on the local Windows development machine, local `docker build` and container runtime execution were not performed on this machine. Cloud builds should be executed in standard Linux CI/CD environments with at least **1 GB of RAM**.
+- **Retrieval & Reranking**: `sentence-transformers` (`BAAI/bge-small-en-v1.5`, `cross-encoder/ms-marco-MiniLM-L-6-v2`), `faiss-cpu`, `rank-bm25`
+- **Application Backend**: `FastAPI`, `uvicorn`, `pydantic v2`, `pydantic-settings`, `httpx`
+- **Storage & Indexing**: `SQLite3`, `FAISS IndexFlatIP`, `pickle` (protocol 4)
+- **Deployment & Infrastructure**: `Docker` (multi-stage), `Oracle Cloud Infrastructure` (ARM64 Ampere A1), `Linux Ubuntu 24.04`
+- **Testing & Quality Assurance**: `pytest`, `pytest-asyncio`, Starlette TestClient
 
 ---
 
-## 10. Quantitative Retrieval Evaluation
-
-Retrieval performance was evaluated against the frozen 60-query benchmark dataset ([`data/eval_dataset_full.json`](file:///d:/Blogger-Engine-main/data/eval_dataset_full.json), 54 in-domain + 6 out-of-domain probes) at final output depth $k=3$:
-
-| Metric | Baseline (Exp 0: MiniLM) | Canonical Production (Exp 4) | Absolute Delta | Relative Improvement |
-| :--- | :---: | :---: | :---: | :---: |
-| **Document Recall@3** | `46.3%` (25/54) | **`66.7%` (36/54)** | **`+20.4 pp`** | **`+44.1%`** |
-| **Passage Recall@3** | `27.8%` (15/54) | **`46.3%` (25/54)** | **`+18.5 pp`** | **`+66.5%`** |
-| **Citation Source Accuracy** | `77.2%` | **`84.6%`** | **`+7.4 pp`** | **`+9.6%`** |
-| **Lexical Groundedness** | `83.0%` | **`82.1%`** | `-0.9 pp` | `-1.1%` |
-| **Context Compression** | 90.7% | **90.4%** | `-0.3 pp` | ~1,948 prompt tokens vs ~20,199 in whole-doc |
-| **Mean Retrieval Latency (CPU)** | `18.52 ms` | **`1,469.89 ms`** | `+1.45 s` | Joint cross-attention trade-off |
-| **Mean Unique Docs in Top-3** | 2.50 docs | **3.00 docs** | **`+0.50 docs`** | **100% inter-document diversity** |
-
-*Note on Latency Accounting*: The canonical evaluation latency (~1.47s) reflects full offline benchmarking on CPU (Dense BGE: 26ms + Sparse BM25: 435ms + Cross-Encoder 20 pairs: 872ms + SQLite dedup: 136ms). This is distinct from local single-query smoke tests (~1.12s).
-
----
-
-## 11. Confidence Threshold Calibration
-
-### Methodology
-To calibrate the refusal gate without corrupting the frozen 60-query benchmark, a separate held-out calibration dataset of 30 queries (20 in-domain + 10 out-of-domain) was created in `data/calibration_dataset.json`. All 20 in-domain calibration queries were sampled from documents strictly disjoint from the 38 target documents of the benchmark.
-
-### Calibration Analysis
-- In Experiment 0 (MiniLM), scores were compressed near zero, using a threshold of `0.35`.
-- In Experiment 4, BGE cosine embeddings and cross-encoder sigmoid scores shifted systematically higher (~+0.25 to +0.35 upward shift).
-- Calibration distribution:
-  - **In-Domain Minimum Score**: `0.7423` (Median: `0.8355`, Mean: `0.8356`, Max: `0.9046`)
-  - **Out-of-Domain Maximum Score**: `0.6464` (Median: `0.6095`, Mean: `0.6047`, Min: `0.5441`)
-  - **Empirical Separation Margin**: `+0.0959` clean gap between highest OOD probe (`0.6464`) and lowest in-domain query (`0.7423`).
-- **Selected Threshold**: **`0.65`**
-  - Clears the highest OOD probe (`0.6464`) with safety headroom, while preserving a **+0.0923 buffer** below the lowest in-domain score (`0.7423`).
-  - Enforces **0 false refusals** across all 54 in-domain benchmark queries (100% valid acceptance).
-  - Eliminates ungrounded synthesis on out-of-domain queries (e.g. baking pizza, quantum dilution).
-
-*Honest Limitation*: A score threshold is a similarity-gating heuristic, not a mathematical proof of out-of-distribution status. Queries near the corpus topic boundary can score close to 0.65.
-
----
-
-## 12. Research Journey & Rejected Approaches
-
-Retrieval optimization progressed through structured, empirical iterations documented in [PROGRESS.md](file:///d:/Blogger-Engine-main/PROGRESS.md):
-
-1. **Experiment 1 (BGE-small Bi-Encoder)**:
-   - Upgraded to 512-token sequence capacity.
-   - Result: Document recall stayed flat at 46.3% (due to dense semantic crowding), but passage recall improved by +5.5 pp. Proved bi-encoders alone hit a capacity ceiling.
-2. **Experiment 2 (Hybrid BM25 + RRF)**:
-   - Added BM25 lexical retrieval and Reciprocal Rank Fusion ($k=60$).
-   - Result: Document recall jumped from 46.3% to **57.4% (+11.1 pp)**. Rescued 10/10 technical acronyms and entity queries that dense search missed.
-3. **Experiment 3 (Retrieval Depth + Document Deduplication)**:
-   - Expanded candidate depth to 10 with document deduplication.
-   - Result: Document recall rose to **61.1% (+3.7 pp)**; top-3 slots reached 100% distinct documents (3.00 unique docs).
-4. **Experiment 4 (Cross-Encoder Neural Reranking)** $\to$ **Canonical**:
-   - Added `cross-encoder/ms-marco-MiniLM-L-6-v2` over top-20 fused candidates.
-   - Result: Document recall reached **66.7% (+5.6 pp)** and passage recall surged to **46.3% (+14.8 pp)**.
-
-### Summary of Rejected Approaches
-- **Experiment 5 (Pseudo-Relevance Feedback Query Expansion)**: Extracted top BM25 terms to augment dense queries. Result: Zero net gain (+0.0 pp doc recall) and introduced query drift on specific entities. Rejected.
-- **Deeper Candidate Pools ($N=50$)**: Doubled cross-encoder scoring from 20 to 50 pairs. Result: Added +1.8s of CPU latency for only +1.8 pp recall gain. Rejected as an inefficient latency trade-off.
-- **Linear Score Fusion (CombSUM / CombMNZ)**: Attempted min-max normalized weighted addition of BM25 and dense scores. Result: Required query-dependent parameter tuning and proved inferior to calibration-free RRF. Rejected.
-- **Larger Same-Family Reranker (ms-marco-MiniLM-L-12-v2)**: Evaluated 12-layer cross-encoder. Result: Doubled inference time to 1.7s on CPU with zero improvement over the 6-layer model. Rejected.
-
----
-
-## 13. System Trade-Offs & Known Limitations
-
-- **CPU Latency Trade-Off**: Running full cross-attention over 20 passage pairs on CPU takes ~870 ms, bringing total retrieval latency to ~1.47 s. In a GPU environment, this would take ~25 ms; on CPU, this is the cost of zero recurring infrastructure costs.
-- **Memory Footprint**: The in-memory FAISS index (124 MB), BM25 cache (185 MB), and model weights (~350 MB) require **~650–700 MB RSS**. A 512 MB micro VPS will experience OOM during startup; a 1 GB RAM instance is required.
-- **Artifact Size**: Canonical assets occupy ~650 MB on disk. Standard GitHub cannot store files >100 MB directly without Git LFS; the Dockerfile provides built-in decompression (`blogger_dedup.db.gz`) and BM25 build-time generation to accommodate repository limits.
-- **External LLM Requirement**: In live QA mode, answer generation depends on an external LLM API (e.g. Groq). When offline or unset, the system provides transparent retrieval and citations with a mock notice.
-- **Recall Ceiling**: Benchmark Document Recall@3 is 66.7%. Diagnostic analysis revealed that 13.0% of target documents were absent from the top-20 candidate pool entirely, establishing an 83.3% theoretical ceiling for Stage 2 reranking.
-
----
-
-## 14. Project Directory Structure
-
-```
-Blogger-Engine-main/
-├── app/
-│   ├── api/
-│   │   └── routes.py             # FastAPI route handlers (/health, /api/stats, /api/search, /api/ask)
-│   ├── core/
-│   │   ├── chunker.py            # Sliding-window document chunker & text cleaner
-│   │   ├── embedder.py           # BGE-small QueryEmbedder with instruction prefix
-│   │   ├── generator.py          # LLM answer generator, citation extractor, refusal gate
-│   │   ├── hybrid_retriever.py   # Canonical Exp 4 engine (Dense + BM25 + RRF + Cross-Encoder + Dedup)
-│   │   └── retriever.py          # Base FAISS dense retriever wrapper
-│   ├── db/
-│   │   └── database.py           # SQLite database interface & query logging
-│   ├── static/
-│   │   ├── index.html            # Single-page editorial user interface
-│   │   └── style.css             # Vanilla CSS luxury editorial design system
-│   ├── config.py                 # Centralized Pydantic settings & environment configuration
-│   ├── main.py                   # FastAPI lifespan management & application factory
-│   └── schemas.py                # Pydantic v2 request/response schemas
-├── data/
-│   ├── blogger_dedup.db          # Canonical SQLite database (81,123 chunks, 8,242 articles)
-│   ├── blogger_dedup.db.gz       # Compressed database archive (69 MB)
-│   ├── eval_dataset_full.json    # Frozen 60-query benchmark dataset
-│   └── calibration_dataset.json      # Held-out 30-query threshold calibration set
-├── indexes/
-│   ├── faiss_chunked_bge_dedup.index # Canonical FAISS IndexFlatIP (81,123 vectors, 384d)
-│   └── bm25_chunked_dedup.pkl    # Serialized BM25Okapi cache (81,123 chunks)
-├── scripts/                      # Offline ingestion, evaluation, and research analysis scripts
-├── tests/
-│   ├── test_phase1.py            # Chunker and SQLite unit tests (6 tests)
-│   ├── test_phase2.py            # Embedder and generator unit tests (14 tests)
-│   ├── test_phase3.py            # API route integration tests (8 tests)
-│   ├── test_phase4.py            # Evaluation harness & metric tests (6 tests)
-│   ├── test_hybrid_retriever.py  # HybridRetriever unit & concurrency tests (21 tests)
-│   ├── test_phase5_step4.py      # Lifespan wiring & 503 error tests (8 tests)
-│   ├── test_phase5_step5.py      # Frontend contract & notice tests (5 tests)
-│   ├── test_phase5_step6_e2e.py  # Production end-to-end integration tests (10 tests)
-│   └── test_phase5_step7_docker.py # Dockerfile & deployment specification tests (6 tests)
-├── Dockerfile                    # Production multi-stage CPU-only container definition
-├── .dockerignore                 # Production build exclusion rules
-├── requirements.txt              # Production Python dependencies
-├── PROGRESS.md                   # Authoritative, chronological engineering and research log
-└── PROJECT_HANDOFF.md            # Comprehensive project handoff and architecture guide
-```
-
----
-
-## 15. Engineering & Interview Highlights
-
-- **Deterministic ID Decoupling**: Vector positions in FAISS (`faiss_id`) are decoupled from SQLite internal `rowid`s and explicitly preserved across ingestion, indexing, and reranking.
-- **Calibration-Free Rank Fusion**: Using Reciprocal Rank Fusion ($k=60$) avoids the need for empirical weight tuning between dense cosine scores and unbounded BM25 scores.
-- **Concurrency-Safe Latency Metadata**: Request-specific latency breakdowns are stored in a custom `RetrievalResultList` and backed by Python's `contextvars.ContextVar`, eliminating race conditions under concurrent async traffic.
-- **Application-Scoped Lifecycle**: Heavy vector indexes and neural cross-encoders are loaded once during FastAPI lifespan startup with explicit thread-safe warmup, eliminating first-request latency spikes.
-- **Strict Degradation Handling**: Missing indexes or uninitialized services raise explicit HTTP 503 errors rather than falling back to unrepresentative toy sample indexes.
-- **100% Test Coverage**: **84 passing tests** across 9 test suites covering chunking, database CRUD, vector search, hybrid fusion, reranking, API contracts, concurrency, and Docker configuration.
-
----
-
-## 16. License
+## License
 
 This project is licensed under the MIT License.
