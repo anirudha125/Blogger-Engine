@@ -34,6 +34,7 @@ class SearchResultItem(BaseModel):
     content: str
     word_count: int
     faiss_id: int
+    preview: Optional[str] = None
 
 
 class SearchResponse(BaseModel):

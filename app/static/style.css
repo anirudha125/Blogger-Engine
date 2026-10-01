@@ -744,7 +744,8 @@ header {
   gap: 0.5rem;
 }
 
-.row-excerpt {
+.row-excerpt,
+.row-preview {
   font-size: 0.91rem;
   color: var(--text-cream-muted);
   line-height: 1.62;

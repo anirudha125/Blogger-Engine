@@ -199,6 +199,53 @@ def get_chunks_by_faiss_ids(
     return [row_map[fid] for fid in faiss_ids if fid in row_map]
 
 
+def get_first_chunks_by_doc_ids(
+    doc_ids: List[str],
+    db_path: str = "data/blogger.db"
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Retrieve the first chunk (chunk_index = 0, or lowest available chunk_index)
+    for each specified doc_id.
+
+    Returns a dict mapping doc_id -> chunk dict.
+    """
+    if not doc_ids:
+        return {}
+
+    unique_doc_ids = list(dict.fromkeys(doc_ids))
+    placeholders = ",".join("?" for _ in unique_doc_ids)
+    query = f"""
+        SELECT * FROM documents
+        WHERE doc_id IN ({placeholders}) AND chunk_index = 0
+    """
+
+    first_chunks: Dict[str, Dict[str, Any]] = {}
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, unique_doc_ids)
+        rows = cursor.fetchall()
+        for r in rows:
+            first_chunks[r["doc_id"]] = dict(r)
+
+        # Defensive fallback if any doc did not start at chunk_index = 0
+        missing = [did for did in unique_doc_ids if did not in first_chunks]
+        if missing:
+            missing_ph = ",".join("?" for _ in missing)
+            fallback_query = f"""
+                SELECT * FROM documents
+                WHERE doc_id IN ({missing_ph})
+                ORDER BY chunk_index ASC
+            """
+            cursor.execute(fallback_query, missing)
+            fallback_rows = cursor.fetchall()
+            for r in fallback_rows:
+                did = r["doc_id"]
+                if did not in first_chunks:
+                    first_chunks[did] = dict(r)
+
+    return first_chunks
+
+
 def get_total_chunks(db_path: str = "data/blogger.db") -> int:
     """Return count of total indexed chunks."""
     if not Path(db_path).exists():

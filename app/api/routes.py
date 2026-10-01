@@ -21,9 +21,11 @@ from app.schemas import (
 from app.core.retriever import SearchResult
 from app.core.hybrid_retriever import HybridRetriever
 from app.core.generator import AnswerGenerator, GeneratedAnswer
+from app.core.preview import extract_document_preview
 from app.db.database import (
     get_total_chunks,
     get_total_documents,
+    get_first_chunks_by_doc_ids,
     log_query,
 )
 
@@ -129,23 +131,39 @@ def search(
 
     elapsed_ms = round((time.time() - start_time) * 1000, 2)
 
-    # Map to schema items
-    items = [
-        SearchResultItem(
-            rank=r.rank,
-            score=round(r.score, 4),
-            chunk_id=r.chunk_id,
-            doc_id=r.doc_id,
-            chunk_index=r.chunk_index,
-            title=r.title,
-            url=r.url,
-            author=r.author,
-            content=r.content,
-            word_count=r.word_count,
-            faiss_id=r.faiss_id
+    # Map to schema items with first-chunk document preview
+    doc_ids = [r.doc_id for r in results]
+    first_chunks_map = {}
+    try:
+        first_chunks_map = get_first_chunks_by_doc_ids(doc_ids, db_path=settings.SQLITE_DB_PATH)
+    except Exception as exc:
+        logger.warning(f"Failed to fetch first chunks for preview: {exc}")
+
+    items = []
+    for r in results:
+        first_chunk = first_chunks_map.get(r.doc_id)
+        first_content = first_chunk["content"] if first_chunk else None
+        preview_text = extract_document_preview(
+            first_chunk_content=first_content,
+            fallback_content=r.content,
+            title=r.title
         )
-        for r in results
-    ]
+        items.append(
+            SearchResultItem(
+                rank=r.rank,
+                score=round(r.score, 4),
+                chunk_id=r.chunk_id,
+                doc_id=r.doc_id,
+                chunk_index=r.chunk_index,
+                title=r.title,
+                url=r.url,
+                author=r.author,
+                content=r.content,
+                word_count=r.word_count,
+                faiss_id=r.faiss_id,
+                preview=preview_text
+            )
+        )
 
     # Optional query logging: failure never breaks response
     try:

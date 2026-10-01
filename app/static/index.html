@@ -103,6 +103,7 @@
     let isSubmitting = false;
     let hasLoadedResults = false;
     const CANONICAL_TOP_K = 3;
+    const SEARCH_TOP_K = 10;
 
     // Client-side text sanitization to resolve upstream encoding artifacts (mojibake) cleanly
     function sanitizeText(str) {
@@ -563,7 +564,7 @@
           const res = await fetch('/api/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, top_k: CANONICAL_TOP_K })
+            body: JSON.stringify({ query, top_k: SEARCH_TOP_K })
           });
 
           if (!res.ok) {
@@ -583,7 +584,7 @@
           document.getElementById('meta-latency').textContent = `${data.latency_ms} ms`;
           document.getElementById('meta-model').style.display = 'none';
 
-          renderPassages(data.results);
+          renderSearchResults(data.results);
         } else {
           resultsLabel.textContent = 'Sources';
 
@@ -668,7 +669,7 @@
             citationsContainer.style.display = 'none';
           }
 
-          renderPassages(data.sources);
+          renderSources(data.sources);
         }
       } catch (err) {
         if (err.apiError) {
@@ -697,16 +698,65 @@
       }
     }
 
-    function renderPassages(passages) {
+    function renderSearchResults(results) {
       const container = document.getElementById('results-list');
       container.innerHTML = '';
 
-      if (!passages || passages.length === 0) {
+      if (!results || results.length === 0) {
         container.innerHTML = '<p class="empty-msg">No matching articles found in the archive.</p>';
         return;
       }
 
-      passages.forEach((p, idx) => {
+      results.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'result-row';
+        row.id = `row-${p.chunk_id}`;
+
+        const numStr = String(idx + 1).padStart(2, '0');
+        const host = extractHostname(p.url);
+        const authorText = p.author && p.author !== 'Unknown' ? `By ${sanitizeText(p.author)}` : '';
+        const sourceLine = [authorText, host].filter(Boolean).join(' · ');
+        const scoreFormatted = (typeof p.score === 'number' && !isNaN(p.score)) ? p.score.toFixed(4) : '0.0000';
+
+        // Short preview from chunk 1 / beginning of document
+        let previewText = p.preview;
+        if (!previewText) {
+          const raw = sanitizeText((p.content || '').trim());
+          const words = raw.split(/\s+/).slice(0, 45).join(' ');
+          previewText = words ? (words + '...') : '';
+        }
+
+        row.innerHTML = `
+          <div class="row-top">
+            <div class="row-title-wrap">
+              <span class="row-index">${numStr}</span>
+              <a href="${escapeHtml(p.url || '#')}" target="_blank" rel="noopener noreferrer" class="row-title">
+                ${escapeHtml(sanitizeText(p.title || 'Untitled Article'))}
+              </a>
+            </div>
+            <span class="row-score">Score ${scoreFormatted}</span>
+          </div>
+
+          ${sourceLine ? `<div class="row-author-source">${escapeHtml(sourceLine)}</div>` : ''}
+
+          <div class="row-content">
+            <div class="row-preview">${escapeHtml(previewText)}</div>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function renderSources(sources) {
+      const container = document.getElementById('results-list');
+      container.innerHTML = '';
+
+      if (!sources || sources.length === 0) {
+        container.innerHTML = '<p class="empty-msg">No matching articles found in the archive.</p>';
+        return;
+      }
+
+      sources.forEach((p, idx) => {
         const row = document.createElement('div');
         row.className = 'result-row';
         row.id = `row-${p.chunk_id}`;
@@ -750,6 +800,14 @@
         `;
         container.appendChild(row);
       });
+    }
+
+    function renderPassages(passages) {
+      if (currentMode === 'search') {
+        renderSearchResults(passages);
+      } else {
+        renderSources(passages);
+      }
     }
 
     function togglePassage(chunkId, btn) {
