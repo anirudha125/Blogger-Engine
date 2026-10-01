@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blogger Engine | Precision RAG Platform</title>
+  <title>Blogger Engine</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -13,68 +13,41 @@
       <div class="brand">
         <span class="brand-emblem">✦</span>
         <span class="brand-title">Blogger Engine</span>
-        <span class="brand-sub">Curated Archive</span>
       </div>
       <div class="nav-meta">
-        <div id="status-badge" class="status-badge">
-          <span class="status-dot"></span>
-          <span id="status-text">SYSTEM READY</span>
-        </div>
-        <span id="corpus-stats" style="display: none; font-family: var(--font-mono); letter-spacing: 0.04em; color: var(--gold-light);">0 CHUNKS</span>
-        <a href="/docs" target="_blank" class="nav-link">API Specification</a>
+        <span id="corpus-stats" class="nav-stats">8,242 ARTICLES</span>
+        <a href="/docs" target="_blank" class="nav-link">API Docs</a>
       </div>
     </div>
   </header>
 
   <main class="container">
-    <!-- Compact Editorial Hero -->
+    <!-- Editorial Hero -->
     <section class="hero">
-      <div class="hero-ornament">✦ Technical Monograph Retrieval ✦</div>
-      <h2>Precision Discovery &amp; <em>Grounded Synthesis</em></h2>
-      <p>A high-assurance retrieval platform built for semantic exploration and verified source citations across machine learning research.</p>
+      <h2>Search technical articles</h2>
+      <p>Find relevant articles and ask questions across the archive.</p>
     </section>
 
-    <!-- Distinctive Mode Switcher -->
+    <!-- Mode Switcher -->
     <nav class="mode-tabs">
-      <button id="tab-search" class="mode-tab active" onclick="setMode('search')">
-        <span>✦</span> Semantic Discovery
-      </button>
-      <button id="tab-ask" class="mode-tab" onclick="setMode('ask')">
-        <span>✦</span> Grounded Synthesis
-      </button>
+      <button id="tab-search" class="mode-tab active" onclick="setMode('search')">Search</button>
+      <button id="tab-ask" class="mode-tab" onclick="setMode('ask')">Ask</button>
     </nav>
 
-    <!-- Elevated Search Bar - Visual Focal Point -->
+    <!-- Elevated Search Bar -->
     <form class="search-form" onsubmit="handleQuery(event)">
       <div class="search-bar">
         <input
           type="text"
           id="query-input"
           class="search-input"
-          placeholder="Inquire across RLHF, RLAIF, preference models, and constitutional AI..."
+          placeholder="Search technical articles across machine learning, alignment, and systems..."
           required
           autocomplete="off"
         />
         <button type="submit" id="submit-btn" class="submit-btn">
-          <span id="btn-text">Inquire</span>
+          <span id="btn-text">Search</span>
           <span id="btn-spinner" class="spinner-icon" style="display: none;"></span>
-        </button>
-      </div>
-
-      <!-- Curated Topics -->
-      <div class="sample-bar">
-        <span class="sample-title">Curated Topics:</span>
-        <button type="button" class="sample-btn" onclick="fillQuery('What is RLAIF and how does it work?')">
-          What is RLAIF?
-        </button>
-        <button type="button" class="sample-btn" onclick="fillQuery('How does RLAIF compare to RLHF in terms of scalability?')">
-          RLAIF vs. RLHF scalability
-        </button>
-        <button type="button" class="sample-btn" onclick="fillQuery('What is a preference model in reinforcement learning?')">
-          Preference models
-        </button>
-        <button type="button" class="sample-btn" onclick="fillQuery('How to bake authentic Neapolitan sourdough pizza?')">
-          Out-of-domain refusal test
         </button>
       </div>
     </form>
@@ -94,19 +67,19 @@
       <!-- QA Answer Box - Dominant Centerpiece in QA Mode -->
       <div id="qa-box" class="qa-box" style="display: none;">
         <div class="qa-headline">
-          <span id="qa-badge" class="qa-badge">✦ Grounded Synthesis</span>
-          <span id="qa-confidence" class="qa-confidence">CONFIDENCE 0.00</span>
+          <span id="qa-badge" class="qa-badge">Answer</span>
+          <span id="qa-confidence" class="qa-confidence" style="display: none;">CONFIDENCE 0.00</span>
         </div>
         <div id="qa-answer-text" class="qa-body"></div>
         <div id="qa-citations" class="qa-citations" style="display: none;">
-          <span class="citation-label">Verified Citations:</span>
+          <span class="citation-label">Sources:</span>
           <div id="citations-list" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
         </div>
       </div>
 
       <!-- Results Meta Header -->
       <div class="results-header">
-        <span id="results-label" class="results-label">Retrieved Passages</span>
+        <span id="results-label" class="results-label">Search Results</span>
         <div class="results-stats">
           <span id="meta-count">0 items</span>
           <span>·</span>
@@ -121,7 +94,7 @@
 
     <!-- Empty State -->
     <div id="initial-state" class="empty-msg">
-      <p>Select a curated topic above or enter an inquiry to examine the archive.</p>
+      <p>Enter a query or question to search the archive.</p>
     </div>
   </main>
 
@@ -490,12 +463,12 @@
     }
 
     async function parseApiError(res) {
-      let title = 'Inquiry Error';
+      let title = 'Error';
       let message = 'An error occurred while processing your request.';
 
       if (res.status === 503) {
         title = 'Service Temporarily Unavailable';
-        message = 'The search and retrieval engine is currently unavailable or initializing. Please try again shortly.';
+        message = 'The search engine is currently unavailable or initializing. Please try again shortly.';
         return { title, message, level: 'warning' };
       }
 
@@ -527,46 +500,25 @@
 
     async function loadSystemStatus() {
       try {
-        const healthRes = await fetch('/health');
-        if (healthRes.ok) {
-          const health = await healthRes.json();
-          const indicator = document.getElementById('status-text');
-          const dot = document.querySelector('.status-dot');
-          if (health.status === 'ok') {
-            indicator.textContent = 'SYSTEM READY';
-            dot.style.background = 'var(--gold-primary)';
-          } else {
-            indicator.textContent = 'DEGRADED';
-            dot.style.background = '#f59e0b';
-          }
-        } else {
-          document.getElementById('status-text').textContent = 'DEGRADED';
-          const dot = document.querySelector('.status-dot');
-          if (dot) dot.style.background = '#f59e0b';
-        }
-
         const statsRes = await fetch('/api/stats');
         if (statsRes.ok) {
           const stats = await statsRes.json();
           const statsEl = document.getElementById('corpus-stats');
-          statsEl.textContent = `${stats.total_chunks} CHUNKS · ${stats.total_documents} DOCS`;
-          statsEl.style.display = 'inline';
+          if (statsEl && stats.total_documents) {
+            statsEl.textContent = `${stats.total_documents.toLocaleString()} ARTICLES`;
+          }
         }
-      } catch (err) {
-        document.getElementById('status-text').textContent = 'OFFLINE';
-        const dot = document.querySelector('.status-dot');
-        if (dot) dot.style.background = '#ef4444';
-      }
+      } catch (_) {}
     }
 
     function setMode(mode) {
       currentMode = mode;
       document.getElementById('tab-search').classList.toggle('active', mode === 'search');
       document.getElementById('tab-ask').classList.toggle('active', mode === 'ask');
-      document.getElementById('btn-text').textContent = mode === 'search' ? 'Discover' : 'Inquire';
+      document.getElementById('btn-text').textContent = mode === 'search' ? 'Search' : 'Ask';
       document.getElementById('query-input').placeholder = mode === 'search' 
-        ? 'Search technical passages on RLHF, RLAIF, and model alignment...'
-        : 'Inquire to receive a grounded answer with verified citations...';
+        ? 'Search technical articles across machine learning, alignment, and systems...'
+        : 'Ask a question across the archive...';
     }
 
     function fillQuery(text) {
@@ -582,7 +534,7 @@
       const rawInput = document.getElementById('query-input').value;
       const query = rawInput.trim();
       if (!query) {
-        showNotice('Inquiry Required', 'Please enter a search query or question to examine the archive.', 'warning');
+        showNotice('Notice', 'Please enter a search query or question.', 'warning');
         document.getElementById('query-input').focus();
         return;
       }
@@ -606,7 +558,7 @@
       try {
         if (currentMode === 'search') {
           qaBox.style.display = 'none';
-          resultsLabel.textContent = 'Matching Articles & Passages';
+          resultsLabel.textContent = 'Search Results';
 
           const res = await fetch('/api/search', {
             method: 'POST',
@@ -627,13 +579,13 @@
           initialState.style.display = 'none';
           resultsContainer.style.display = 'block';
 
-          document.getElementById('meta-count').textContent = `${data.total_results} passages`;
+          document.getElementById('meta-count').textContent = `${data.total_results} results`;
           document.getElementById('meta-latency').textContent = `${data.latency_ms} ms`;
           document.getElementById('meta-model').style.display = 'none';
 
           renderPassages(data.results);
         } else {
-          resultsLabel.textContent = 'Referenced Source Material';
+          resultsLabel.textContent = 'Sources';
 
           const res = await fetch('/api/ask', {
             method: 'POST',
@@ -661,23 +613,25 @@
           metaModel.textContent = `· ${data.provider.toUpperCase()} / ${data.model}`;
           metaModel.style.display = 'inline';
 
-          // QA Box State - Dominant Centerpiece
+          // QA Box State - Centerpiece
           qaBox.style.display = 'block';
           qaBox.classList.toggle('refused', data.refused);
 
           const qaBadge = document.getElementById('qa-badge');
           if (data.refused) {
-            qaBadge.textContent = (data.confidence_score < 0.65)
-              ? '⚠ Request Refused (Below Confidence Threshold)'
-              : '⚠ Request Refused (Insufficient Evidence)';
+            qaBadge.textContent = 'Not enough information in the archive';
           } else {
-            qaBadge.textContent = '✦ Grounded Synthesis';
+            qaBadge.textContent = 'Answer';
           }
 
           const confScore = (typeof data.confidence_score === 'number' && !isNaN(data.confidence_score))
             ? data.confidence_score.toFixed(3)
             : '0.000';
-          document.getElementById('qa-confidence').textContent = `CONFIDENCE ${confScore}`;
+          const confEl = document.getElementById('qa-confidence');
+          if (confEl) {
+            confEl.textContent = `CONFIDENCE ${confScore}`;
+            confEl.style.display = 'none';
+          }
 
           // Map citations for inline interactive references
           currentCitationsMap = {};
@@ -722,11 +676,11 @@
         } else if (err.name === 'TypeError' || (err.message && err.message.toLowerCase().includes('fetch'))) {
           showNotice(
             'Connection Notice',
-            'Unable to reach the Blogger Engine backend. Please verify network connectivity.',
+            'Unable to reach the server. Please verify network connectivity.',
             'error'
           );
         } else {
-          showNotice('Inquiry Notice', err.message || 'An unexpected error occurred.', 'warning');
+          showNotice('Notice', err.message || 'An unexpected error occurred.', 'warning');
         }
 
         // If no results have ever loaded, maintain the clean initial state
@@ -737,6 +691,7 @@
       } finally {
         isSubmitting = false;
         submitBtn.disabled = false;
+        btnText.textContent = currentMode === 'search' ? 'Search' : 'Ask';
         btnText.style.display = 'inline';
         btnSpinner.style.display = 'none';
       }
@@ -747,7 +702,7 @@
       container.innerHTML = '';
 
       if (!passages || passages.length === 0) {
-        container.innerHTML = '<p class="empty-msg">No corresponding passages located in the archive.</p>';
+        container.innerHTML = '<p class="empty-msg">No matching articles found in the archive.</p>';
         return;
       }
 
@@ -770,7 +725,7 @@
             <div class="row-title-wrap">
               <span class="row-index">${numStr}</span>
               <a href="${escapeHtml(p.url || '#')}" target="_blank" rel="noopener noreferrer" class="row-title">
-                ${escapeHtml(sanitizeText(p.title || 'Untitled Passage'))}
+                ${escapeHtml(sanitizeText(p.title || 'Untitled Article'))}
               </a>
             </div>
             <span class="row-score">Score ${scoreFormatted}</span>
@@ -788,7 +743,7 @@
                 <span>ID: ${escapeHtml(p.chunk_id || '')}</span>
               </div>
               <button type="button" class="toggle-passage-btn" onclick="togglePassage('${p.chunk_id}', this)">
-                ✦ Read full passage ↓
+                Read full passage ↓
               </button>
             ` : ''}
           </div>
@@ -808,12 +763,12 @@
         fullEl.style.display = 'none';
         excerptEl.style.display = 'block';
         if (metaEl) metaEl.style.display = 'none';
-        btn.textContent = '✦ Read full passage ↓';
+        btn.textContent = 'Read full passage ↓';
       } else {
         fullEl.style.display = 'block';
         excerptEl.style.display = 'none';
         if (metaEl) metaEl.style.display = 'flex';
-        btn.textContent = '✦ Collapse passage ↑';
+        btn.textContent = 'Collapse passage ↑';
       }
     }
 
