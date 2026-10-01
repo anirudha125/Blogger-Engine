@@ -9,7 +9,8 @@
 
 > A production-structured Retrieval-Augmented Generation (RAG) platform delivering grounded semantic search and verifiable citation-backed question answering over 8,242 technical publications (81,123 passage chunks).
 
-**Live Public Demo**: [http://141.148.198.115:8000](http://141.148.198.115:8000) *(hosted on Oracle Cloud ARM64)*
+- **Primary Live Demo (HTTPS)**: [https://blogger-engine.tail03cf7a.ts.net](https://blogger-engine.tail03cf7a.ts.net)
+- **Direct Demo Endpoint (HTTP fallback)**: [http://141.148.198.115:8000](http://141.148.198.115:8000) *(hosted on Oracle Cloud ARM64)*
 
 ---
 
