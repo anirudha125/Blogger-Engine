@@ -146,6 +146,323 @@
         .replace(/\u00A0/g, ' ');
     }
 
+    let currentCitationsMap = {};
+
+    function handleInlineCitationClick(docNum) {
+      const chunkId = currentCitationsMap[String(docNum)];
+      if (chunkId) {
+        highlightRow(chunkId);
+      } else {
+        const idx = parseInt(docNum, 10) - 1;
+        const rows = document.querySelectorAll('.result-row');
+        if (rows && rows[idx]) {
+          const rowId = rows[idx].id.replace('row-', '');
+          highlightRow(rowId);
+        }
+      }
+    }
+
+    function formatMath(latex) {
+      if (!latex) return '';
+      let m = latex.trim();
+
+      // Clean LaTeX font and environment commands
+      m = m.replace(/\\mathrm\{([^}]+)\}/g, '$1')
+           .replace(/\\text\{([^}]+)\}/g, '$1')
+           .replace(/\\mathbf\{([^}]+)\}/g, '$1')
+           .replace(/\\mathit\{([^}]+)\}/g, '$1')
+           .replace(/\\mathcal\{D\}/g, '𝒟')
+           .replace(/\\mathbb\{E\}/g, '𝔼')
+           .replace(/\\mathbb\{R\}/g, 'ℝ')
+           .replace(/\\mathbb\{P\}/g, 'ℙ')
+           .replace(/\\mathbb\{N\}/g, 'ℕ')
+           .replace(/\\mathbb\{Z\}/g, 'ℤ');
+
+      // Greek letters
+      const greek = {
+        '\\pi': 'π', '\\theta': 'θ', '\\phi': 'φ', '\\varphi': 'φ',
+        '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ',
+        '\\epsilon': 'ε', '\\lambda': 'λ', '\\mu': 'μ', '\\sigma': 'σ',
+        '\\tau': 'τ', '\\omega': 'ω', '\\eta': 'η', '\\rho': 'ρ',
+        '\\zeta': 'ζ', '\\chi': 'χ', '\\psi': 'ψ',
+        '\\Delta': 'Δ', '\\Sigma': 'Σ', '\\Omega': 'Ω', '\\Gamma': 'Γ', '\\Phi': 'Φ'
+      };
+      for (const [k, v] of Object.entries(greek)) {
+        m = m.replaceAll(k, v);
+      }
+
+      // Operators & relation symbols
+      m = m.replace(/\\sum/g, '∑')
+           .replace(/\\prod/g, '∏')
+           .replace(/\\int/g, '∫')
+           .replace(/\\infty/g, '∞')
+           .replace(/\\approx/g, '≈')
+           .replace(/\\sim/g, '∼')
+           .replace(/\\neq|\\ne/g, '≠')
+           .replace(/\\leq|\\le/g, '≤')
+           .replace(/\\geq|\\ge/g, '≥')
+           .replace(/\\times/g, '×')
+           .replace(/\\cdot/g, '·')
+           .replace(/\\pm/g, '±')
+           .replace(/\\in/g, '∈')
+           .replace(/\\to/g, '→')
+           .replace(/\\leftarrow/g, '←')
+           .replace(/\\forall/g, '∀')
+           .replace(/\\exists/g, '∃')
+           .replace(/\\nabla/g, '∇')
+           .replace(/\\partial/g, '∂');
+
+      // Delimiters & spaces
+      m = m.replace(/\\quad/g, '  ')
+           .replace(/\\qquad/g, '   ')
+           .replace(/\\[,;!]/g, ' ')
+           .replace(/\\\|/g, ' ∥ ')
+           .replace(/\\mid/g, ' | ')
+           .replace(/\\Bigl\[|\\Biggl\[|\\left\[/g, '[')
+           .replace(/\\Bigr\]|\\Biggr\]|\\right\]/g, ']')
+           .replace(/\\Bigl\(|\\Biggl\(|\\left\(/g, '(')
+           .replace(/\\Bigr\)|\\Biggr\)|\\right\)/g, ')')
+           .replace(/\\Bigl\\\{|\\Biggl\\\{|\\left\\\{/g, '{')
+           .replace(/\\Bigr\\\}|\\Biggr\\\}|\\right\\\}/g, '}')
+           .replace(/\\displaystyle/g, '');
+
+      // Fractions: \frac{a}{b} -> (a / b)
+      for (let k = 0; k < 3; k++) {
+        m = m.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1 / $2)');
+      }
+
+      // Accents
+      m = m.replace(/\\tilde\{([a-zA-Z])\}/g, '$1̃')
+           .replace(/\\hat\{([a-zA-Z])\}/g, '$1̂')
+           .replace(/\\bar\{([a-zA-Z])\}/g, '$1̄');
+
+      // Subscripts & Superscripts
+      m = m.replace(/_\{([^{}]+)\}/g, '<sub>$1</sub>')
+           .replace(/_([a-zA-Z0-9α-ωΑ-Ω])/g, '<sub>$1</sub>')
+           .replace(/\^\{([^{}]+)\}/g, '<sup>$1</sup>')
+           .replace(/\^([a-zA-Z0-9α-ωΑ-Ω])/g, '<sup>$1</sup>');
+
+      m = m.replace(/\s+/g, ' ').trim();
+      return m;
+    }
+
+    function renderGroundedAnswer(rawMarkdown, citations = []) {
+      if (!rawMarkdown) return '';
+
+      // 1. Sanitize upstream mojibake encoding artifacts
+      let text = sanitizeText(rawMarkdown);
+
+      // 2. Strict HTML escaping to neutralize raw tags / scripts (XSS immunity)
+      text = String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+      // Token storage
+      const tokens = [];
+      function addToken(html) {
+        const id = `@@@TOKEN_${tokens.length}@@@`;
+        tokens.push({ id, html });
+        return id;
+      }
+
+      // 3. Extract Fenced Code Blocks (```lang ... ```)
+      text = text.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g, (_, lang, code) => {
+        const cleanLang = lang ? ` language-${lang}` : '';
+        return addToken(`<div class="qa-code-wrapper"><pre class="qa-code-block"><code class="${cleanLang}">${code.trimEnd()}</code></pre></div>`);
+      });
+
+      // 4. Extract Block LaTeX Math \[ ... \]
+      text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => {
+        return addToken(`<div class="math-display">${formatMath(math)}</div>`);
+      });
+
+      // 5. Extract Inline LaTeX Math \( ... \)
+      text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => {
+        return addToken(`<span class="math-inline">${formatMath(math)}</span>`);
+      });
+
+      // 6. Extract Inline Code `...`
+      text = text.replace(/`([^`\n]+)`/g, (_, code) => {
+        return addToken(`<code class="qa-inline-code">${code}</code>`);
+      });
+
+      // 7. Extract Citations [Doc X] or [Doc X, Doc Y]
+      text = text.replace(/\[Doc[\s\u00A0\u202F]*(\d+)(?:[\s\u00A0\u202F]*,[\s\u00A0\u202F]*(?:Doc[\s\u00A0\u202F]*)?(\d+))?\]/gi, (_, docNum1, docNum2) => {
+        const b1 = `<button type="button" class="inline-citation" data-doc="${docNum1}" onclick="handleInlineCitationClick('${docNum1}')" title="Inspect source [Doc ${docNum1}]">[Doc ${docNum1}]</button>`;
+        if (docNum2) {
+          const b2 = `<button type="button" class="inline-citation" data-doc="${docNum2}" onclick="handleInlineCitationClick('${docNum2}')" title="Inspect source [Doc ${docNum2}]">[Doc ${docNum2}]</button>`;
+          return addToken(`${b1} ${b2}`);
+        }
+        return addToken(b1);
+      });
+
+      // Helper for inline formatting on text segments
+      function formatInline(str) {
+        if (!str) return '';
+        let out = str;
+        // Bold: **text** or __text__
+        out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        out = out.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        // Italic: *text* or _text_
+        out = out.replace(/\*([^\*\n]+?)\*/g, '<em>$1</em>');
+        out = out.replace(/(^|[\s(])_([^_]+)_(?=[\s).,!?;:]|$)/g, '$1<em>$2</em>');
+        // Links: only http/https allowed
+        out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)\"]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="qa-link">$1</a>');
+        // Strip malicious link protocols (e.g. javascript:)
+        out = out.replace(/\[([^\]]+)\]\([^\)]*\)/g, '$1');
+        return out;
+      }
+
+      // 8. Line-by-line block processing (tables, headings, blockquotes, lists, paragraphs)
+      const lines = text.split(/\r?\n/);
+      const outputBlocks = [];
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          i++;
+          continue;
+        }
+
+        // A. Markdown Table Detection
+        if (line.includes('|') && i + 1 < lines.length && /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/.test(lines[i + 1])) {
+          const headerLine = lines[i];
+          const sepLine = lines[i + 1];
+          i += 2;
+
+          const parseRow = (rowStr) => {
+            let cells = rowStr.trim().split('|');
+            if (rowStr.trim().startsWith('|')) cells.shift();
+            if (rowStr.trim().endsWith('|')) cells.pop();
+            return cells.map(c => c.trim());
+          };
+
+          const headers = parseRow(headerLine);
+          const sepCells = parseRow(sepLine);
+          const alignments = sepCells.map(c => {
+            const left = c.startsWith(':');
+            const right = c.endsWith(':');
+            if (left && right) return 'center';
+            if (right) return 'right';
+            return 'left';
+          });
+
+          const bodyRows = [];
+          while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+            bodyRows.push(parseRow(lines[i]));
+            i++;
+          }
+
+          let tableHtml = '<div class="qa-table-wrapper"><table class="qa-table"><thead><tr>';
+          headers.forEach((h, colIdx) => {
+            const align = alignments[colIdx] || 'left';
+            tableHtml += `<th style="text-align: ${align}">${formatInline(h)}</th>`;
+          });
+          tableHtml += '</tr></thead><tbody>';
+
+          bodyRows.forEach(row => {
+            tableHtml += '<tr>';
+            headers.forEach((_, colIdx) => {
+              const val = row[colIdx] !== undefined ? row[colIdx] : '';
+              const align = alignments[colIdx] || 'left';
+              tableHtml += `<td style="text-align: ${align}">${formatInline(val)}</td>`;
+            });
+            tableHtml += '</tr>';
+          });
+          tableHtml += '</tbody></table></div>';
+          outputBlocks.push(tableHtml);
+          continue;
+        }
+
+        // B. Headings (# H1, ## H2, ### H3, #### H4)
+        const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+        if (headingMatch) {
+          const level = headingMatch[1].length;
+          const content = formatInline(headingMatch[2].trim());
+          outputBlocks.push(`<h${level} class="qa-heading qa-h${level}">${content}</h${level}>`);
+          i++;
+          continue;
+        }
+
+        // C. Blockquotes (> ...)
+        if (line.match(/^\s*&gt;\s?/)) {
+          const quoteLines = [];
+          while (i < lines.length && lines[i].match(/^\s*&gt;\s?/)) {
+            quoteLines.push(lines[i].replace(/^\s*&gt;\s?/, '').trim());
+            i++;
+          }
+          const quoteContent = quoteLines.map(l => formatInline(l)).join('<br>');
+          outputBlocks.push(`<blockquote class="qa-blockquote"><p>${quoteContent}</p></blockquote>`);
+          continue;
+        }
+
+        // D. Unordered Lists (* item, - item)
+        if (line.match(/^\s*[\*\-]\s+(.+)$/)) {
+          const items = [];
+          while (i < lines.length && lines[i].match(/^\s*[\*\-]\s+(.+)$/)) {
+            const itemMatch = lines[i].match(/^\s*[\*\-]\s+(.+)$/);
+            items.push(formatInline(itemMatch[1].trim()));
+            i++;
+          }
+          const listHtml = `<ul class="qa-ul">${items.map(it => `<li>${it}</li>`).join('')}</ul>`;
+          outputBlocks.push(listHtml);
+          continue;
+        }
+
+        // E. Ordered Lists (1. item)
+        if (line.match(/^\s*\d+\.\s+(.+)$/)) {
+          const items = [];
+          while (i < lines.length && lines[i].match(/^\s*\d+\.\s+(.+)$/)) {
+            const itemMatch = lines[i].match(/^\s*\d+\.\s+(.+)$/);
+            items.push(formatInline(itemMatch[1].trim()));
+            i++;
+          }
+          const listHtml = `<ol class="qa-ol">${items.map(it => `<li>${it}</li>`).join('')}</ol>`;
+          outputBlocks.push(listHtml);
+          continue;
+        }
+
+        // F. Standalone Math or Block tokens
+        if (trimmed.startsWith('@@@TOKEN_') && trimmed.endsWith('@@@') && !trimmed.includes(' ')) {
+          outputBlocks.push(trimmed);
+          i++;
+          continue;
+        }
+
+        // G. Regular Paragraphs
+        const paraLines = [];
+        while (
+          i < lines.length &&
+          lines[i].trim() &&
+          !lines[i].match(/^(#{1,4})\s+/) &&
+          !lines[i].match(/^\s*&gt;\s?/) &&
+          !lines[i].match(/^\s*[\*\-]\s+/) &&
+          !lines[i].match(/^\s*\d+\.\s+/) &&
+          !(lines[i].includes('|') && i + 1 < lines.length && /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/.test(lines[i + 1]))
+        ) {
+          paraLines.push(lines[i].trim());
+          i++;
+        }
+        const paraContent = paraLines.map(l => formatInline(l)).join('<br>');
+        outputBlocks.push(`<p class="qa-p">${paraContent}</p>`);
+      }
+
+      let finalHtml = outputBlocks.join('\n');
+
+      // 9. Restore Tokens
+      tokens.forEach(({ id, html }) => {
+        finalHtml = finalHtml.replaceAll(id, html);
+      });
+
+      return finalHtml;
+    }
+
     function extractHostname(url) {
       try {
         const parsed = new URL(url);
@@ -361,7 +678,20 @@
             ? data.confidence_score.toFixed(3)
             : '0.000';
           document.getElementById('qa-confidence').textContent = `CONFIDENCE ${confScore}`;
-          document.getElementById('qa-answer-text').textContent = sanitizeText(data.answer);
+
+          // Map citations for inline interactive references
+          currentCitationsMap = {};
+          if (data.citations && data.citations.length > 0) {
+            data.citations.forEach((c) => {
+              const m = (c.doc_tag || '').match(/\d+/);
+              if (m && c.chunk_id) {
+                currentCitationsMap[m[0]] = c.chunk_id;
+              }
+            });
+          }
+
+          // Render answer with safe Markdown, math, and inline citations
+          document.getElementById('qa-answer-text').innerHTML = renderGroundedAnswer(data.answer, data.citations);
 
           // Citations List
           const citationsContainer = document.getElementById('qa-citations');

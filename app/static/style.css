@@ -418,7 +418,230 @@ header {
   font-size: 1.05rem;
   line-height: 1.74;
   color: var(--text-navy);
-  white-space: pre-wrap;
+}
+
+/* Grounded Answer Headings */
+.qa-body .qa-heading {
+  font-family: var(--font-serif);
+  color: var(--text-navy);
+  font-weight: 700;
+  margin-top: 1.6rem;
+  margin-bottom: 0.65rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.qa-body .qa-h1 {
+  font-size: 1.55rem;
+  border-bottom: 1px solid rgba(197, 160, 89, 0.35);
+  padding-bottom: 0.4rem;
+}
+
+.qa-body .qa-h2 {
+  font-size: 1.32rem;
+  border-bottom: 1px solid rgba(197, 160, 89, 0.25);
+  padding-bottom: 0.35rem;
+}
+
+.qa-body .qa-h3 {
+  font-size: 1.15rem;
+}
+
+.qa-body .qa-h4 {
+  font-size: 1.02rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-navy-muted);
+}
+
+.qa-body > :first-child {
+  margin-top: 0 !important;
+}
+
+/* Grounded Answer Paragraphs */
+.qa-body .qa-p {
+  margin-bottom: 1.1rem;
+  line-height: 1.76;
+}
+
+.qa-body .qa-p:last-child {
+  margin-bottom: 0;
+}
+
+/* Grounded Answer Lists */
+.qa-body .qa-ul,
+.qa-body .qa-ol {
+  margin: 0.85rem 0 1.25rem 1.35rem;
+  padding-left: 0.5rem;
+}
+
+.qa-body .qa-ul li,
+.qa-body .qa-ol li {
+  margin-bottom: 0.45rem;
+  line-height: 1.68;
+}
+
+.qa-body .qa-ul {
+  list-style-type: disc;
+}
+
+.qa-body .qa-ol {
+  list-style-type: decimal;
+}
+
+/* Editorial Markdown Tables */
+.qa-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: 1.35rem 0;
+  border-radius: 4px;
+  border: 1px solid rgba(197, 160, 89, 0.5);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+}
+
+.qa-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94rem;
+  text-align: left;
+}
+
+.qa-table th {
+  background: #f6f2e9;
+  color: var(--text-navy);
+  font-family: var(--font-serif);
+  font-weight: 700;
+  padding: 0.8rem 1rem;
+  border-bottom: 2px solid var(--gold-primary);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.qa-table td {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  color: var(--text-navy);
+  vertical-align: top;
+  line-height: 1.62;
+}
+
+.qa-table tr:last-child td {
+  border-bottom: none;
+}
+
+.qa-table tr:hover td {
+  background: rgba(197, 160, 89, 0.05);
+}
+
+/* Code Blocks & Inline Code */
+.qa-code-wrapper {
+  margin: 1.25rem 0;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--gold-subtle);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.qa-code-block {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 1.1rem 1.35rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.62;
+  margin: 0;
+}
+
+.qa-inline-code {
+  background: rgba(15, 23, 42, 0.07);
+  color: #92400e;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0.15rem 0.38rem;
+  border-radius: 3px;
+  border: 1px solid rgba(197, 160, 89, 0.3);
+}
+
+/* Blockquotes */
+.qa-blockquote {
+  margin: 1.25rem 0;
+  padding: 0.85rem 1.25rem;
+  border-left: 4px solid var(--gold-primary);
+  background: rgba(197, 160, 89, 0.07);
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+  color: var(--text-navy);
+}
+
+.qa-blockquote p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+/* Links */
+.qa-link {
+  color: #b45309;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.qa-link:hover {
+  color: var(--gold-primary);
+}
+
+/* Mathematical Notation */
+.math-inline {
+  font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", serif;
+  font-style: italic;
+  padding: 0 0.15rem;
+  color: var(--text-navy);
+  letter-spacing: 0.02em;
+}
+
+.math-display {
+  display: block;
+  text-align: center;
+  margin: 1.25rem 0;
+  padding: 0.95rem 1.25rem;
+  background: rgba(197, 160, 89, 0.06);
+  border-radius: 4px;
+  border-left: 3px solid var(--gold-primary);
+  font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", serif;
+  font-size: 1.08rem;
+  overflow-x: auto;
+  color: var(--text-navy);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.02);
+}
+
+/* In-text Interactive Citation Badges */
+.inline-citation {
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  color: var(--text-navy);
+  border: 1px solid var(--gold-primary);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  margin: 0 0.2rem;
+  border-radius: 3px;
+  cursor: pointer;
+  vertical-align: baseline;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease-in-out;
+}
+
+.inline-citation:hover {
+  background: var(--gold-primary);
+  color: #ffffff;
+  border-color: var(--gold-light);
+  box-shadow: 0 2px 6px rgba(197, 160, 89, 0.4);
+  transform: translateY(-1px);
 }
 
 .qa-citations {
