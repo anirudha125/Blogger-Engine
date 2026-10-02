@@ -53,30 +53,30 @@ Blogger Engine ingests 8,242 deduplicated articles into 81,123 sliding-window ch
 
 ```mermaid
 flowchart TD
-    User([User Query]) --> API[FastAPI /api/ask]
+    User(["User Query"]) --> API["FastAPI /api/ask"]
 
     subgraph Stage1["Stage 1: Multi-Index Candidate Retrieval"]
-        API --> Dense[BGE Bi-Encoder + FAISS<br/>Top-20 Dense Candidates]
-        API --> Sparse[BM25Okapi Lexical Search<br/>Top-20 Sparse Candidates]
+        API --> Dense["BGE Bi-Encoder + FAISS<br/>Top-20 Dense Candidates"]
+        API --> Sparse["BM25Okapi Lexical Search<br/>Top-20 Sparse Candidates"]
     end
 
-    Dense --> RRF[Reciprocal Rank Fusion k=60<br/>Pool: Top-20 Fused Candidates]
+    Dense --> RRF["Reciprocal Rank Fusion k=60<br/>Pool: Top-20 Fused Candidates"]
     Sparse --> RRF
 
     subgraph Stage2["Stage 2: Neural Reranking & Diversity"]
-        RRF --> CE[Cross-Encoder ms-marco-MiniLM-L-6-v2<br/>Joint Cross-Attention Scoring]
-        CE --> Dedup[Document Deduplication<br/>1 Best Chunk per Unique doc_id]
-        Dedup --> Top3[Final Top-3 Passages]
+        RRF --> CE["Cross-Encoder ms-marco-MiniLM-L-6-v2<br/>Joint Cross-Attention Scoring"]
+        CE --> Dedup["Document Deduplication<br/>1 Best Chunk per Unique doc_id"]
+        Dedup --> Top3["Final Top-3 Passages"]
     end
 
     subgraph Stage3["Stage 3: Gating & Grounded Synthesis"]
-        Top3 --> Gate{Max BGE Cosine Sim >= 0.65?}
-        Gate -- No --> RefuseGate[Return 200 OK<br/>refused: true<br/>citations: empty]
-        Gate -- Yes --> Prompt[Assemble Grounded Context<br/>[Doc 1], [Doc 2], [Doc 3]]
-        Prompt --> LLM[LLM Generation<br/>Groq API]
-        LLM --> PostGen{Detect Refusal Phrasing?}
-        PostGen -- Yes --> RefusePost[Return 200 OK<br/>refused: true<br/>citations: empty]
-        PostGen -- No --> Success[Return 200 OK<br/>refused: false<br/>citations: populated]
+        Top3 --> Gate{"Max BGE Cosine Sim >= 0.65?"}
+        Gate -- No --> RefuseGate["Return 200 OK<br/>refused: true<br/>citations: empty"]
+        Gate -- Yes --> Prompt["Assemble Grounded Context<br/>Doc 1 · Doc 2 · Doc 3"]
+        Prompt --> LLM["LLM Generation<br/>Groq API"]
+        LLM --> PostGen{"Detect Refusal Phrasing?"}
+        PostGen -- Yes --> RefusePost["Return 200 OK<br/>refused: true<br/>citations: empty"]
+        PostGen -- No --> Success["Return 200 OK<br/>refused: false<br/>citations: populated"]
     end
 ```
 
