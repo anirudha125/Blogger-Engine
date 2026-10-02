@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/badge/Tests-94%20passed-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A production-structured Retrieval-Augmented Generation (RAG) platform delivering grounded semantic search and verifiable citation-backed question answering over 8,242 technical publications (81,123 passage chunks).
+> A production-structured Retrieval-Augmented Generation (RAG) platform delivering grounded semantic search and verifiable citation-backed question answering over 8,242 AI/ML technical publications (81,123 passage chunks).
 
 - **Primary Live Demo (HTTPS)**: [https://blogger-engine.tail03cf7a.ts.net](https://blogger-engine.tail03cf7a.ts.net)
 - **Direct Demo Endpoint (HTTP fallback)**: [http://141.148.198.115:8000](http://141.148.198.115:8000) *(hosted on Oracle Cloud ARM64)*
@@ -17,7 +17,10 @@
 ## 1. Project Overview
 
 ### What Blogger Engine Does
-**Blogger Engine** is an end-to-end RAG system designed for technical document search and grounded question answering. Given user queries over a corpus of engineering and machine learning publications, it retrieves the most relevant passages through a multi-stage hybrid pipeline, filters unconfident or out-of-domain queries, and synthesizes answers backed by explicit, verifiable in-text citations.
+**Blogger Engine** is an end-to-end RAG system designed for technical document search and grounded question answering over a curated archive of AI and machine learning publications. Given user queries over this corpus, it retrieves the most relevant passages through a multi-stage hybrid pipeline, applies an empirical retrieval-confidence gate, and synthesizes answers backed by explicit, verifiable in-text citations.
+
+### Corpus Scope
+**Corpus scope**: Blogger Engine indexes a curated archive of AI/ML-focused technical articles covering areas such as machine learning, NLP, LLMs, reinforcement learning, RAG, computer vision, and related systems. It is not a general-purpose search engine or a complete index of technical articles on the web.
 
 ### The Problem It Solves
 Standard naive RAG pipelines suffer from compounding failure modes on technical corpora:

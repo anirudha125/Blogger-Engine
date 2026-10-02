@@ -15,7 +15,7 @@
         <span class="brand-title">Blogger Engine</span>
       </div>
       <div class="nav-meta">
-        <span id="corpus-stats" class="nav-stats">8,242 ARTICLES</span>
+        <span id="corpus-stats" class="nav-stats">8,242 AI/ML ARTICLES</span>
         <a href="/docs" target="_blank" class="nav-link">API Docs</a>
       </div>
     </div>
@@ -25,7 +25,7 @@
     <!-- Editorial Hero -->
     <section class="hero">
       <h2>Search technical articles</h2>
-      <p>Find relevant articles and ask questions across the archive.</p>
+      <p>Find relevant articles and ask questions across the AI/ML archive.</p>
     </section>
 
     <!-- Mode Switcher -->
@@ -41,7 +41,7 @@
           type="text"
           id="query-input"
           class="search-input"
-          placeholder="Search technical articles across machine learning, alignment, and systems..."
+          placeholder="Search technical articles across AI and machine learning"
           required
           autocomplete="off"
         />
@@ -94,7 +94,7 @@
 
     <!-- Empty State -->
     <div id="initial-state" class="empty-msg">
-      <p>Enter a query or question to search the archive.</p>
+      <p>Search the AI/ML archive or ask a question.</p>
     </div>
   </main>
 
@@ -506,7 +506,7 @@
           const stats = await statsRes.json();
           const statsEl = document.getElementById('corpus-stats');
           if (statsEl && stats.total_documents) {
-            statsEl.textContent = `${stats.total_documents.toLocaleString()} ARTICLES`;
+            statsEl.textContent = `${stats.total_documents.toLocaleString()} AI/ML ARTICLES`;
           }
         }
       } catch (_) {}
@@ -518,7 +518,7 @@
       document.getElementById('tab-ask').classList.toggle('active', mode === 'ask');
       document.getElementById('btn-text').textContent = mode === 'search' ? 'Search' : 'Ask';
       document.getElementById('query-input').placeholder = mode === 'search' 
-        ? 'Search technical articles across machine learning, alignment, and systems...'
+        ? 'Search technical articles across AI and machine learning'
         : 'Ask a question across the archive...';
     }
 
